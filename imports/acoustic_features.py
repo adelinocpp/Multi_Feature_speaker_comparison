@@ -137,7 +137,7 @@ class AcousticsFeatures:
         
         # --- Variaveis auxiliares
                 
-        aud_spec = np.empty(c.NUM_PLP_FILTERS,0)
+        aud_spec = np.empty((c.NUM_PLP_FILTERS,0))
         # -- - INICIO DO CALCULO POR FRAME -------------------------------------
         for time_idx in range(0,num_samples-n_win_length+1,n_step_length):
             win_audio = audio[time_idx:time_idx+n_win_length]
@@ -152,7 +152,7 @@ class AcousticsFeatures:
             
             # -- PLP, RASTA PLP
             win_fft = scipy.fft.fft(win_audio*(32*1024)*hann_win,n=n_FFT)
-            frame_aud_spec = np.empty((c.NUM_PLP_FILTER,))
+            frame_aud_spec = np.empty((c.NUM_PLP_FILTERS,))
             for idx_aud in range(0,c.NUM_PLP_FILTERS):
                 if (c.PLP_SUM_POWER):
                     abs_fft = np.power(np.abs(win_fft[:h_FFT]),2)
