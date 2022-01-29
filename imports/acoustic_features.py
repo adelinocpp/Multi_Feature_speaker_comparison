@@ -14,10 +14,25 @@ import config as c
 import matplotlib.pyplot as plt
 from sklearn.neighbors import KernelDensity
 
+from scipy import signal
+from scikits.talkbox.linpred.levinson_lpc import lpc
+# ------------------------------------------------------------------------------
+def do_lpc(spec, order=8):
+    nbands = spec.shape[0]
+    x = np.concatenate((spec,np.flipud(spec)),axis=1)
+    x = np.real(np.fft.ifft(x,axis=1))
+    x = x[:nbands,:]
+    
 # ------------------------------------------------------------------------------
 def rasta_filter(spec):
-    # TODO: implementar
-    return np.zeros(spec.shape)
+    numer = np.array(range(-2,3))
+    numer = -numer /np.sum(numer*numer);
+    denom = np.array([1 -0.94]);
+    zi = signal.lfilter_zi(numer, [1])
+    y, z = signal.lfilter(numer, [1], spec[:4],axis=0,zi=0*zi)
+    y0 = y*0
+    y1 = signal.lfilter(numer, denom, spec[4:],axis=0,zi=z)
+    return np.concatenate((y0,y1[0]),axis=0)
 
 # ------------------------------------------------------------------------------
 def hertz2bark(hertz_freq):
@@ -31,12 +46,12 @@ def build_bark_filters(nfft,sr,nfilts=0,width=1,min_freq=0,max_freq=0):
     nyq_bark = hertz2bark(max_freq) - min_bark
     if (nfilts == 0):
         nfilts = np.ceil(nyq_bark)+1
-        
-    wts = np.zeros((nfilts, nfft));
+    h_fft = int(0.5*nfft)
+    wts = np.zeros((nfilts, h_fft));
 
     step_barks = nyq_bark/(nfilts-1);
-    bin_barks = np.array([hertz2bark(0.5*i*sr/nfft) for i in range(0,nfft)])
-    limits = np.empty((2,nfft))
+    bin_barks = np.array([hertz2bark(0.5*i*sr/nfft) for i in range(0,h_fft)])
+    limits = np.empty((2,h_fft))
     for i in range(0,nfilts):
         f_bark_mid = min_bark + i*step_barks;
         # Linear slopes in log-space (i.e. dB) intersect to trapezoidal window
@@ -45,7 +60,7 @@ def build_bark_filters(nfft,sr,nfilts=0,width=1,min_freq=0,max_freq=0):
         # lof = (bin_barks - f_bark_mid - 0.5);
         # hif = (bin_barks - f_bark_mid + 0.5);
         # wts[i,:] = np.power(10, np.min(0, np.min([hif; -2.5*lof])/width))
-        wts[i,:] = np.power(10, np.minimum(np.zeros((nfft,)), np.min(limits,axis=0)/width))
+        wts[i,:] = np.power(10, np.minimum(np.zeros((h_fft,)), np.min(limits,axis=0)/width))
     return wts[:,:int(0.5*nfft)]
     
 # ------------------------------------------------------------------------------
@@ -157,14 +172,21 @@ class AcousticsFeatures:
                 if (c.PLP_SUM_POWER):
                     abs_fft = np.power(np.abs(win_fft[:h_FFT]),2)
                     frame_aud_spec[idx_aud] = np.power(\
-                        np.multiply(plp_bark_filters[idx_aud,:],\
+                        np.matmul(plp_bark_filters[idx_aud,:],\
                                     np.power(np.abs(win_fft[:h_FFT]),2) ),2)
                 else:
                     frame_aud_spec[idx_aud] = np.power(\
-                        np.multiply(plp_bark_filters[idx_aud,:],\
+                        np.matmul(plp_bark_filters[idx_aud,:],\
                                     np.abs(win_fft[:h_FFT])),2)
-                    
-            aud_spec = np.append(aud_spec,frame_aud_spec,axis=1)
+            # PLP e RASTA-PLP       
+            nl_aspectrum = np.append(nl_aspectrum,frame_aud_spec,axis=1)
+            
+            
+            
+            
+            
+            
+  
             # TODO: implementar depois de calcular as bandas
 
 
@@ -182,7 +204,21 @@ class AcousticsFeatures:
             prob_mtx[idx,:] = np.exp(kde.score_samples(X))
         entropy_mtx = np.sum(np.multiply(prob_mtx,np.log(prob_mtx)),axis=0)        
         # ----------------------------------------------------------------------
+        # CONTINUA PLP e RASTA-PLP
+        aspectrum_rasta = np.empty(nl_aspectrum.shape)
+        aspectrm_plp = np.log(nl_aspectrum)
+        for idx in range(0,nl_aspectrum.shape[0]):
+            aspectrum_rasta[idx,:] = np.exp(rasta_filter(np.log(nl_aspectrum[idx,:])))
         
+        aspectrum_rasta = do_lpc(aspectrum_rasta)
+        aspectrm_plp    = do_lpc(aspectrm_plp)    
+        
+         #lpcas = dolpc(postspectrum, modelorder);
+         # convert lpc to cepstra
+         #cepstra = lpc2cep(lpcas, modelorder+1);
+         # .. or to spectra
+         #[spectra,F,M] = lpc2spec(lpcas, nbands);
+            
         # x_vals = np.linspace(data_spectogram[0,:].min(),data_spectogram[0,:].max(),200)
         # plt.plot(x_vals,density(x_vals))
         # plt.show()
