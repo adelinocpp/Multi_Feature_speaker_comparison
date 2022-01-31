@@ -9,7 +9,7 @@ import config as c
 from imports.files_utils import list_contend
 from pathlib import Path
 from imports.acoustic_features import AcousticsFeatures
-import audio_metadata
+# import audio_metadata
 import subprocess
 import pickle
 
@@ -25,13 +25,14 @@ if (CONVERT_AUDIO_TO_PROCESS):
     file_list = list_contend(c.AUDIO_TRAIN_PATH,pattern)
     for audio_file_name in file_list:
         try:
-            metadata = audio_metadata.load(audio_file_name)
-            if (metadata['streaminfo'].sample_rate == 8000) and \
-                (metadata['streaminfo'].channels == 1) and (Path(audio_file_name).suffix == '.wav'):
-                continue
-            else:
+            print('Need test if files are ok')
+            # metadata = audio_metadata.load(audio_file_name)
+            # if (metadata['streaminfo'].sample_rate == 8000) and \
+            #     (metadata['streaminfo'].channels == 1) and (Path(audio_file_name).suffix == '.wav'):
+                # continue
+            # else:
                 # TODO: covert file rotine
-                print('File {:} out of specification'.format(Path(audio_file_name).name))
+                # print('File {:} out of specification'.format(Path(audio_file_name).name))
                 # tempFileName = audio_file_name.replace(Path(audio_file_name).suffix,'.wav')
                 # convertFilecmd = 'sox ' + audio_file_name + ' -c 1 -r 8000 -e signed-integer -b 16 ' + tempFileName
                 # subprocess.Popen(convertFilecmd, shell=True, stdout=subprocess.PIPE).wait()
