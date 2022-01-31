@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 from sklearn.neighbors import KernelDensity
 
 from scipy import signal
+<<<<<<< HEAD
 # -----------------------------------------------------------------------------
 def computeD(x,p=2):
     return x
@@ -91,6 +92,17 @@ def do_lpc2cep(spec, order=8):
     # y = np.divide()
     return y
 # -----------------------------------------------------------------------------
+=======
+from scikits.talkbox.linpred.levinson_lpc import lpc
+# ------------------------------------------------------------------------------
+def do_lpc(spec, order=8):
+    nbands = spec.shape[0]
+    x = np.concatenate((spec,np.flipud(spec)),axis=1)
+    x = np.real(np.fft.ifft(x,axis=1))
+    x = x[:nbands,:]
+    
+# ------------------------------------------------------------------------------
+>>>>>>> c92c1faefd39cd56d2aa06594ce5b75c37599e88
 def rasta_filter(spec):
     numer = np.array(range(-2,3))
     numer = -numer /np.sum(numer*numer);
@@ -247,7 +259,11 @@ class AcousticsFeatures:
                         np.matmul(plp_bark_filters[idx_aud,:],\
                                     np.abs(win_fft[:h_FFT])),2)
             # PLP e RASTA-PLP       
+<<<<<<< HEAD
             aud_spec = np.append(aud_spec,frame_aud_spec,axis=1)
+=======
+            nl_aspectrum = np.append(nl_aspectrum,frame_aud_spec,axis=1)
+>>>>>>> c92c1faefd39cd56d2aa06594ce5b75c37599e88
             
             
             
@@ -274,6 +290,7 @@ class AcousticsFeatures:
         # ----------------------------------------------------------------------
         # CONTINUA PLP e RASTA-PLP
         aspectrum_rasta = np.empty(nl_aspectrum.shape)
+<<<<<<< HEAD
         aspectrum_plp = np.log(nl_aspectrum)
         for idx in range(0,nl_aspectrum.shape[0]):
             aspectrum_rasta[idx,:] = np.exp(rasta_filter(np.log(nl_aspectrum[idx,:])))
@@ -281,6 +298,15 @@ class AcousticsFeatures:
         aspectrum_rasta = lifter(do_lpc2cep(aspectrum_rasta,c.NUM_CEPS_COEFS),0.6)
         aspectrum_plp   = lifter(do_lpc2cep(aspectrum_plp,c.NUM_CEPS_COEFS),0.6)
         # mtxDesc = lifter(cepstra, 0.6);
+=======
+        aspectrm_plp = np.log(nl_aspectrum)
+        for idx in range(0,nl_aspectrum.shape[0]):
+            aspectrum_rasta[idx,:] = np.exp(rasta_filter(np.log(nl_aspectrum[idx,:])))
+        
+        aspectrum_rasta = do_lpc(aspectrum_rasta)
+        aspectrm_plp    = do_lpc(aspectrm_plp)    
+        
+>>>>>>> c92c1faefd39cd56d2aa06594ce5b75c37599e88
          #lpcas = dolpc(postspectrum, modelorder);
          # convert lpc to cepstra
          #cepstra = lpc2cep(lpcas, modelorder+1);
