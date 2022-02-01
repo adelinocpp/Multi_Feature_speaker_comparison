@@ -44,7 +44,7 @@ if (CONVERT_AUDIO_TO_PROCESS):
         
 if (COMPUTE_TRAIN_FEATURES):
     file_list = list_contend(c.AUDIO_TRAIN_PATH,('.wav'))
-    
+    file_list.sort()
     print('Inicio do calculo de características:')
     print('Arquivos de treinamento: {}'.format(len(file_list)))
     for idx, audio_file_name in enumerate(file_list):

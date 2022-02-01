@@ -29,4 +29,5 @@ STEP_SIZE = 0.01
 # ------------------------------------------------------------------------------
 NUM_PLP_FILTERS = 17
 NUM_CEPS_COEFS = 13
-PLP_SUM_POWER = False
+# PLP_DITHER = False
+PLP_SUM_POWER = True

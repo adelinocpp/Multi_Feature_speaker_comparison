@@ -13,11 +13,64 @@ from pathlib import Path
 import config as c
 import matplotlib.pyplot as plt
 from sklearn.neighbors import KernelDensity
+import numpy.matlib as npm
 
 from scipy import signal
+
+# -----------------------------------------------------------------------------
+def levinson_aps(r, p):
+    X = np.zeros((p,p))
+    r_w = r[0:p]
+    r_c = r_w[::-1]
+    for i in range(0,p):
+        if (i == 0):
+            X[i,:] = r_w
+        else:
+            X[i,:] = np.roll(r_c,i+1)
+    b = -r[1:p+1]
+    a = np.linalg.lstsq(X, b.T,rcond=None)[0]
+    G = r[0] - np.matmul(a.T,r[1:p+1])
+    a = np.concatenate(([1],a))
+    return a, G
 # -----------------------------------------------------------------------------
 def computeD(x,p=2):
     return x
+# -----------------------------------------------------------------------------
+def postaud(x,fmax,broaden=0):
+    nbands,nframes = x.shape
+
+    # equal loundness weights stolen from rasta code
+    # eql = [0.000479 0.005949 0.021117 0.044806 0.073345 0.104417 0.137717 ...
+    #        0.174255 0.215590 0.263260 0.318302 0.380844 0.449798 0.522813
+    #        0.596597];
+    nfpts = nbands + 2*broaden
+    bandcfhz = [bark2hertz(i*hertz2bark(fmax)/(nfpts-1)) for i in range(0, nfpts)]    
+    # Remove extremal bands (the ones that will be duplicated)
+    bandcfhz = bandcfhz[broaden:(nfpts-broaden)]
+
+    # Hynek's magic equal-loudness-curve formula
+    fsq = np.power(bandcfhz,2)
+    ftmp = fsq + 1.6e5
+    eql = np.multiply( np.power(np.divide(fsq,ftmp),2), \
+        np.divide(fsq+1.44e6,ftmp+ 9.61e6) )
+    # eql = ((fsq./ftmp).^2) .* ((fsq + 1.44e6)./(fsq + 9.61e6));
+
+    # weight the critical bands
+    eql.shape = (eql.shape[0],1)
+    z = np.multiply(npm.repmat(eql, 1,nframes),x)
+
+    # cube root compress
+    z = np.power(z,0.33)
+
+    # replicate first and last band (because they are unreliable as calculated)
+    if (broaden == 1):
+        y = np.concatenate((z[0:1,:],z,z[-1:,:]),axis=0)
+        #z[[1,1:nbands,nbands],:]
+    else:      
+        y = np.concatenate((z[1:2,:],z[1:-1,:],z[-2:-1,:]),axis=0)
+        # y = z[[2,2:(nbands-1),nbands-1],:]
+    return y
+
 # -----------------------------------------------------------------------------
 def lifter(x, lift=0.6, invs=0):
     ncep = x.shape[0]
@@ -42,53 +95,33 @@ def lifter(x, lift=0.6, invs=0):
         y = np.matmul(np.diag(liftwts),x)
     return y
 # -----------------------------------------------------------------------------
-def make_matrix_X(x, p):
-    n = len(x)
-    # [x_n, ..., x_1, 0, ..., 0]
-    xz = np.concatenate([x[::-1], np.zeros(p)])
-    X = np.zeros((n - 1, p))
-    for i in range(n - 1):
-        offset = n - 1 - i
-        X[i, :] = xz[offset : offset + p]
-    return X
-# -----------------------------------------------------------------------------
-def solve_lpc(x, p):
-    b = x[1:]
-    X = make_matrix_X(x, p)
-    a = np.linalg.lstsq(X, b.T,rcond=None)[0]
-    e = b - np.dot(X, a)
-    g = np.var(e)
-    a = np.concatenate(([1],a))
-    return [a, g]
-# -----------------------------------------------------------------------------
 def lpc2cep(a,nout=0):
-    nin = a.shape[0]
+    [nin, nframes] = a.shape
     order = nin - 1;
     if (nout == 0):
         nout = order + 1;
-    c = np.zeros(nout,)
-    c[0] = -np.log(a[0])
-    
-    a = a/a[0]
+    c = np.zeros((nout,nframes))
+    c[0,:] = -np.log(a[0,:])
+    a = a/a[0,:]
     for n in range(1,nout):
         Soma = 0
         for m in range(1,n):
-            Soma += (n - m) * a[m] * c[n - m]
-            
-        c[n] = -(a[n] + Soma/n);
+            Soma += (n - m) * a[m,:] * c[n - m,:]
+        c[n,:] = -(a[n,:] + Soma/n);
     return c
 # -----------------------------------------------------------------------------
-def do_lpc2cep(spec, order=8):
+def do_lpc(spec, order=8):
     [nbands, nframes] = spec.shape
-    x = np.concatenate((spec,np.flipud(spec)),axis=1)
-    x = np.real(np.fft.ifft(x,axis=1))
+    spec_c = spec[1:-1,:]
+    x = np.concatenate((spec,np.flipud(spec_c)),axis=0)
+    x = np.real(scipy.fft.ifft(x,axis=0))
     x = x[:nbands,:]
     y = np.zeros((order+1,nframes))
     for idx in range(0,nframes):
-        a, e = solve_lpc(x[:,idx], order)
-        # y[:,idx] = a/e
-        y[:,idx] = lpc2cep(a/e,order+1)
-    # y = np.divide()
+        # a, e = solve_lpc(x[:,idx], order)
+        a, e = levinson_aps(x[:,idx], order)
+        y[:,idx] = a/e
+        # y[:,idx] = lpc2cep(a/e,order+1)
     return y
 # -----------------------------------------------------------------------------
 def rasta_filter(spec):
@@ -100,10 +133,11 @@ def rasta_filter(spec):
     y0 = y*0
     y1 = signal.lfilter(numer, denom, spec[4:],axis=0,zi=z)
     return np.concatenate((y0,y1[0]),axis=0)
-
+# -----------------------------------------------------------------------------
+def bark2hertz(bark_freq):
+    return 600 * np.sinh(bark_freq/6)
 # -----------------------------------------------------------------------------
 def hertz2bark(hertz_freq):
-    # Converts frequencies Hertz (Hz) to Bark
     return 6*np.arcsinh(hertz_freq/600)
 # -----------------------------------------------------------------------------
 def build_bark_filters(nfft,sr,nfilts=0,width=1,min_freq=0,max_freq=0):
@@ -112,23 +146,19 @@ def build_bark_filters(nfft,sr,nfilts=0,width=1,min_freq=0,max_freq=0):
     min_bark = hertz2bark(min_freq)
     nyq_bark = hertz2bark(max_freq) - min_bark
     if (nfilts == 0):
-        nfilts = np.ceil(nyq_bark)+1
+        nfilts = np.ceil(nyq_bark) + 1
     h_fft = int(0.5*nfft)
-    wts = np.zeros((nfilts, h_fft));
+    wts = np.zeros((nfilts, h_fft))
 
-    step_barks = nyq_bark/(nfilts-1);
-    bin_barks = np.array([hertz2bark(0.5*i*sr/nfft) for i in range(0,h_fft)])
+    step_barks = nyq_bark/(nfilts-1)
+    bin_barks = np.array([hertz2bark(i*sr/nfft) for i in range(0,h_fft)])
     limits = np.empty((2,h_fft))
     for i in range(0,nfilts):
-        f_bark_mid = min_bark + i*step_barks;
-        # Linear slopes in log-space (i.e. dB) intersect to trapezoidal window
+        f_bark_mid = min_bark + i*step_barks
         limits[0,:] = -2.5*(bin_barks - f_bark_mid - 0.5)
         limits[1,:] = (bin_barks - f_bark_mid + 0.5)
-        # lof = (bin_barks - f_bark_mid - 0.5);
-        # hif = (bin_barks - f_bark_mid + 0.5);
-        # wts[i,:] = np.power(10, np.min(0, np.min([hif; -2.5*lof])/width))
         wts[i,:] = np.power(10, np.minimum(np.zeros((h_fft,)), np.min(limits,axis=0)/width))
-    return wts[:,:int(0.5*nfft)]
+    return wts
     
 # -----------------------------------------------------------------------------
 def build_folders_to_save(file_name):
@@ -139,9 +169,9 @@ def build_folders_to_save(file_name):
             os.mkdir(curDir)
 # -----------------------------------------------------------------------------
 class Feature:
-    def __init__(self):
-        self.data = np.empty([])
-        self.computed = False
+    def __init__(self,data=np.empty([]),computed=True):
+        self.data = data
+        self.computed = computed
 # -----------------------------------------------------------------------------
 class AcousticsFeatures:
     def __init__(self, file_name= '', win_length=0.025, step_length = 0.01):
@@ -162,7 +192,7 @@ class AcousticsFeatures:
                          "formants":    Feature(),
                          "mfcc":        Feature(),
                          "pncc":        Feature(),
-                         "plp":         Feature(),
+                         "plp":         Feature(computed=False),
                          "rasta_plp":   Feature(),
                          "ssch":        Feature(),
                          "zcpa":        Feature(),
@@ -220,56 +250,61 @@ class AcousticsFeatures:
         # --- Variaveis auxiliares
                 
         aud_spec = np.empty((c.NUM_PLP_FILTERS,0))
-        # -- - INICIO DO CALCULO POR FRAME -------------------------------------
+        # -- - INICIO DO CALCULO POR FRAME ------------------------------------
         for time_idx in range(0,num_samples-n_win_length+1,n_step_length):
             win_audio = audio[time_idx:time_idx+n_win_length]
             data_time = np.append(data_time,(time_idx+0.5*n_win_length)/self.sample_rate);
-            # -- ESPECTOGRAMA, MFCC
-            win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
-            abs_fft = np.abs(win_fft[:h_FFT])
-            # ---
-            spec = 20*np.log10(abs_fft)
-            spec.shape = (h_FFT,1)
-            data_spectogram = np.append(data_spectogram,spec,axis=1)
             
-            # -- PLP, RASTA PLP
-            win_fft = scipy.fft.fft(win_audio*(32*1024)*hann_win,n=n_FFT)
-            frame_aud_spec = np.empty((c.NUM_PLP_FILTERS,1))
-            nl_aspectrum = np.empty((c.NUM_PLP_FILTERS,0))
-            for idx_aud in range(0,c.NUM_PLP_FILTERS):
-                if (c.PLP_SUM_POWER):
-                    abs_fft = np.power(np.abs(win_fft[:h_FFT]),2)
-                    frame_aud_spec[idx_aud] = np.power(\
-                        np.matmul(plp_bark_filters[idx_aud,:],\
-                                    np.power(np.abs(win_fft[:h_FFT]),2) ),2)
-                else:
-                    frame_aud_spec[idx_aud] = np.power(\
-                        np.matmul(plp_bark_filters[idx_aud,:],\
-                                    np.abs(win_fft[:h_FFT])),2)
-            # PLP e RASTA-PLP       
-            aud_spec = np.append(aud_spec,frame_aud_spec,axis=1)
+            # -- ESPECTOGRAMA, MFCC
+            if (not self.features["spectogram"].computed):
+                win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
+                abs_fft = np.abs(win_fft[:h_FFT])
+                # ---
+                spec = 20*np.log10(abs_fft)
+                spec.shape = (h_FFT,1)
+                data_spectogram = np.append(data_spectogram,spec,axis=1)
+            
+            
+            # -- PLP, RASTA PLP -----------------------------------------------
+            if (not self.features["plp"].computed) or (not self.features["rasta_plp"].computed):
+                win_fft = scipy.fft.fft(win_audio*(32*1024)*hann_win,n=n_FFT)
+                frame_aud_spec = np.empty((c.NUM_PLP_FILTERS,1))
+                abs_fft = np.power(np.abs(win_fft[:h_FFT]),2)
+                for idx_aud in range(0,c.NUM_PLP_FILTERS):    
+                    if (c.PLP_SUM_POWER):
+                        frame_aud_spec[idx_aud] = np.matmul(plp_bark_filters[idx_aud,:],abs_fft)    
+                    else:
+                        frame_aud_spec[idx_aud] = np.power(\
+                                    np.matmul(plp_bark_filters[idx_aud,:],
+                                    np.sqrt(abs_fft)),2)
+                aud_spec = np.append(aud_spec,frame_aud_spec,axis=1)
             
   
             # TODO: implementar depois de calcular as bandas
 
         # --- FIM DO CALCULO POR FRAME -----------------------------------------       
         # --- Entropia espectral -----------------------------------------------
-        prob_mtx = np.empty(data_spectogram.shape)
-        for idx in range (0,h_FFT):
-            X = data_spectogram[idx,:][:, np.newaxis]    
-            kde = KernelDensity(kernel='gaussian').fit(X)
-            prob_mtx[idx,:] = np.exp(kde.score_samples(X))
-        entropy_mtx = np.sum(np.multiply(prob_mtx,np.log(prob_mtx)),axis=0)        
+        if (not self.features["spc_entropy"].computed):
+            prob_mtx = np.empty(data_spectogram.shape)
+            for idx in range (0,h_FFT):
+                X = data_spectogram[idx,:][:, np.newaxis]    
+                kde = KernelDensity(kernel='gaussian').fit(X)
+                prob_mtx[idx,:] = np.exp(kde.score_samples(X))
+                entropy_mtx = np.sum(np.multiply(prob_mtx,np.log(prob_mtx)),axis=0)        
         # ----------------------------------------------------------------------
         # CONTINUA PLP e RASTA-PLP
-        aspectrum_rasta = np.empty(aud_spec.shape)
-        aspectrum_plp = np.log(aud_spec)
-        for idx in range(0,aud_spec.shape[0]):
-            aspectrum_rasta[idx,:] = np.exp(rasta_filter(np.log(aud_spec[idx,:])))
-        
-        aspectrum_rasta = lifter(do_lpc2cep(aspectrum_rasta,c.NUM_CEPS_COEFS),0.6)
-        aspectrum_plp   = lifter(do_lpc2cep(aspectrum_plp,c.NUM_CEPS_COEFS),0.6)
-    
+        if (not self.features["plp"].computed):
+            aspectrum_plp = postaud(aud_spec,sr/2)
+            
+            lpc = do_lpc(aspectrum_plp,c.NUM_CEPS_COEFS)
+            cep = lpc2cep(lpc,c.NUM_CEPS_COEFS+1)
+            aspectrum_plp   = lifter(cep,0.6)
+        if (not self.features["rasta_plp"].computed):
+            aspectrum_rasta = np.empty(aud_spec.shape)
+            for idx in range(0,aud_spec.shape[0]):
+                aspectrum_rasta[idx,:] = np.exp(rasta_filter(np.log(aud_spec[idx,:])))
+            # aspectrum_rasta = lifter(do_lpc2cep(aspectrum_rasta,c.NUM_CEPS_COEFS),0.6)
+            
          #lpcas = dolpc(postspectrum, modelorder);
          # convert lpc to cepstra
          #cepstra = lpc2cep(lpcas, modelorder+1);
@@ -283,11 +318,18 @@ class AcousticsFeatures:
         
         self.features["time_domain"] = data_time
         self.features["freq_domain"] = data_freq_domain
-        self.features["spectogram"].data = data_spectogram
-        self.features["spectogram"].computed = True    
-        self.features["spc_entropy"].data = entropy_mtx
-        self.features["spc_entropy"].computed = True        
-            
+        if (not self.features["spectogram"].computed):
+            self.features["spectogram"].data = data_spectogram
+            self.features["spectogram"].computed = True    
+        if (not self.features["spc_entropy"].computed):
+            self.features["spc_entropy"].data = entropy_mtx
+            self.features["spc_entropy"].computed = True        
+        if (not self.features["plp"].computed):
+            self.features["plp"].data = aspectrum_plp
+            self.features["plp"].computed = True        
+        if (not self.features["rasta_plp"].computed):
+            self.features["rasta_plp"].data = aspectrum_rasta
+            self.features["rasta_plp"].computed = True        
             
             
             
