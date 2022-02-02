@@ -17,6 +17,7 @@ import numpy.matlib as npm
 
 from scipy import signal
 
+# TODO: criar nova biblioteca de funções
 # -----------------------------------------------------------------------------
 def levinson_aps(r, p):
     X = np.zeros((p,p))
@@ -34,7 +35,20 @@ def levinson_aps(r, p):
     return a, G
 # -----------------------------------------------------------------------------
 def computeD(x,p=2):
-    return x
+    nDim, nframe = x.shape
+    dMtx = np.zeros((nDim, nframe))
+    for i in range(p,nframe- p):
+        n = np.zeros((nDim,))
+        d = 0;
+        for j in range(1,p+1):
+            n0 = j*(x[:,i+j] - x[:,i-j])
+            n0.shape = (nDim,1)
+            n = np.add(n,j*(x[:,i+j] - x[:,i-j]))
+            d += j^2;
+    
+        dMtx[:,i] = np.divide(n,(2*d))
+
+    return dMtx
 # -----------------------------------------------------------------------------
 def postaud(x,fmax,broaden=0):
     nbands,nframes = x.shape
@@ -298,7 +312,11 @@ class AcousticsFeatures:
             
             lpc = do_lpc(aspectrum_plp,c.NUM_CEPS_COEFS)
             cep = lpc2cep(lpc,c.NUM_CEPS_COEFS+1)
-            aspectrum_plp   = lifter(cep,0.6)
+            # TODO: verificar dimensoes PLP e conferir com matlab
+            plp_mtx   = lifter(cep,0.6)
+            d_plp_mtx = computeD(plp_mtx)
+            dd_plp_mtx = computeD(d_plp_mtx)
+            plp_mtx = np.concatenate((plp_mtx,d_plp_mtx,dd_plp_mtx),axis=0)
         if (not self.features["rasta_plp"].computed):
             aspectrum_rasta = np.empty(aud_spec.shape)
             for idx in range(0,aud_spec.shape[0]):
@@ -325,7 +343,7 @@ class AcousticsFeatures:
             self.features["spc_entropy"].data = entropy_mtx
             self.features["spc_entropy"].computed = True        
         if (not self.features["plp"].computed):
-            self.features["plp"].data = aspectrum_plp
+            self.features["plp"].data = plp_mtx
             self.features["plp"].computed = True        
         if (not self.features["rasta_plp"].computed):
             self.features["rasta_plp"].data = aspectrum_rasta
