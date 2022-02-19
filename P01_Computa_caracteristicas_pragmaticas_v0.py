@@ -29,9 +29,7 @@ if (CONVERT_AUDIO_TO_PROCESS):
             strExt = audio_file_name.split('/')[-1].split('.')[-1].upper()
             inputAudioData = AudioData(audio_file_name)
             if (AudioData(audio_file_name).check('WAV','PCM','1','8000')):
-
-                    continue
-            
+                    continue            
             else:
                 print('Need test if files are ok')
                 file_list[index] = AudioData(audio_file_name).suit('WAV','1','8000')

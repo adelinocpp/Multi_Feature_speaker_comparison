@@ -1,45 +1,12 @@
 import numpy as np
-import math
 from scipy.special import jv
 
 def bessel(v, X):
     return ((1j**(-v))*jv(v,1j*X)).real
-
-def stft(x, n_fft=512, win_length=400, hop_length=160, window='hamming'):   
-    if window == 'hanning':
-        window = np.hanning(win_length)
-    elif window == 'hamming':
-        window = np.hamming(win_length)
-    elif window == 'rectangle':
-        window = np.ones(win_length)
-    return np.array([np.fft.rfft(window*x[i:i+win_length],n_fft,axis=0) for i in range(0, len(x)-win_length, hop_length)])
-    
-
-def estnoisem(pSpectrum,hop_length):
-    """
-    This is python implementation of [1],[2], and [3]. 
-    
-    Refs:
-       [1] Rainer Martin.
-           Noise power spectral density estimation based on optimal smoothing and minimum statistics.
-           IEEE Trans. Speech and Audio Processing, 9(5):504-512, July 2001.
-       [2] Rainer Martin.
-           Bias compensation methods for minimum statistics noise power spectral density estimation
-           Signal Processing, 2006, 86, 1215-1229
-       [3] Dirk Mauler and Rainer Martin
-           Noise power spectral density estimation on highly correlated data
-           Proc IWAENC, 2006
-    
-    	 Copyright (C) Mike Brookes 2008
-         Version: $Id: estnoisem.m 1718 2012-03-31 16:40:41Z dmb $
-    
-      VOICEBOX is a MATLAB toolbox for speech processing.
-      Home page: http://www.ee.ic.ac.uk/hp/staff/dmb/voicebox/voicebox.html
-    """
-    
-    (nFrames,nFFT2)=np.shape(pSpectrum)          # number of frames and freq bins
-    x=np.array(np.zeros((nFrames,nFFT2)) )           # initialize output arrays
-    xs=np.array(np.zeros((nFrames,nFFT2)) )           # will hold std error in the future
+   
+def estnoisem_frame(pSpectrum,hop_length, p):
+    nFFT2 = pSpectrum.shape[0]          # number of frames and freq bins
+    x = np.zeros((nFFT2,))            # initialize output arrays
 
     # default algorithm constants
     taca= 0.0449    # smoothing time constant for alpha_c = -hop_length/log(0.7) in equ (11)
@@ -57,7 +24,7 @@ def estnoisem(pSpectrum,hop_length):
 
 
     # derived algorithm constants
-    aca=np.exp(-hop_length/taca) # smoothing constant for alpha_c in equ (11) = 0.7
+    aca = np.exp(-hop_length/taca) # smoothing constant for alpha_c in equ (11) = 0.7
     acmax=aca          # min value of alpha_c = 0.7 in equ (11) also = 0.7
     amax=np.exp(-hop_length/tamax) # max smoothing constant in (3) = 0.96
     aminh=np.exp(-hop_length/taminh) # min smoothing constant (upper limit) in (3) = 0.3
@@ -76,8 +43,6 @@ def estnoisem(pSpectrum,hop_length):
     qeqimax=1/qeqmin  # maximum value of Qeq inverse (23)
     qeqimin=1/qeqmax # minumum value of Qeq per frame inverse
     
-
-    p=pSpectrum[0,:]         # smoothed power spectrum
     ac=1               # correction factor (9)
     sn2=p              # estimated noise power
     pb=p               # smoothed noisy speech power (20)
@@ -91,65 +56,60 @@ def estnoisem(pSpectrum,hop_length):
     lminflag=np.zeros(nFFT2)      # flag to remember local minimum
 
     # loop for each frame
-    for t in range(0,nFrames):                       # we use t instead of lambda in the paper
-        pSpectrum_t=pSpectrum[t,:]                      # noise speech power spectrum
-        acb=(1+(sum(p) / (sum(pSpectrum_t) + 1e-9)-1)**2)**(-1)    # alpha_c-bar(t)  (9) ( + 1e-9 add by adelino)
-        
-        tmp=np.array([acb] )
-        tmp[tmp < acmax] = acmax
-        #max_complex(np.array([acb] ),np.array([acmax] ))
-        
-        ac=aca*ac+(1-aca)*tmp    # alpha_c(t)  (10)
-        
-        ah=amax*ac*(1+(p/sn2-1)**2)**(-1)       # alpha_hat: smoothing factor per frequency (11)
-        SNR=sum(p)/sum(sn2)
-        
-               
-        ah=max_complex(ah,min_complex(np.array([aminh] ),np.array([SNR**SNRexp] )))                            # lower limit for alpha_hat (12)
+   
+    acb=(1+(sum(p) / (sum(pSpectrum) + 1e-9)-1)**2)**(-1)    # alpha_c-bar(t)  (9) ( + 1e-9 add by adelino)
+    
+    tmp=np.array([acb] )
+    tmp[tmp < acmax] = acmax
+    #max_complex(np.array([acb] ),np.array([acmax] ))
+    
+    ac=aca*ac+(1-aca)*tmp    # alpha_c(t)  (10)
+    
+    ah=amax*ac*(1+(p/sn2-1)**2)**(-1)       # alpha_hat: smoothing factor per frequency (11)
+    SNR=sum(p)/sum(sn2)
+    
+           
+    ah=max_complex(ah,min_complex(np.array([aminh] ),np.array([SNR**SNRexp] )))                            # lower limit for alpha_hat (12)
 
-        p=ah*p+(1-ah)*pSpectrum_t            # smoothed noisy speech power (3)
+    p=ah*p+(1-ah)*pSpectrum            # smoothed noisy speech power (3)
 
-        b=min_complex(ah**2,np.array([bmax] )) # smoothing constant for estimating periodogram variance (22 + 2 lines)
-        pb=b*pb + (1-b)*p            # smoothed periodogram (20)
-        pb2=b*pb2 + (1-b)*p**2     	 # smoothed periodogram squared (21)
+    b=min_complex(ah**2,np.array([bmax] )) # smoothing constant for estimating periodogram variance (22 + 2 lines)
+    pb=b*pb + (1-b)*p            # smoothed periodogram (20)
+    pb2=b*pb2 + (1-b)*p**2     	 # smoothed periodogram squared (21)
 
-        qeqi=max_complex(min_complex((pb2-pb**2)/(2*sn2**2),np.array([qeqimax] )),np.array([qeqimin/(t+1)] ))   # Qeq inverse (23)
-        qiav=sum(qeqi)/nFFT2              # Average over all frequencies (23+12 lines) (ignore non-duplication of DC and nyquist terms)
-        bc=1+av*np.sqrt(qiav)              # bias correction factor (23+11 lines)
-        bmind=1+2*(nd-1)*(1-md)/(qeqi**(-1)-2*md)      # we use the signalmplified form (17) instead of (15)
-        bminv=1+2*(nv-1)*(1-mv)/(qeqi**(-1)-2*mv)    # same expressignalon but for sub windows
-        kmod=(bc*p*bmind) < actmin      # Frequency mask for new minimum
+    qeqi = max_complex(min_complex((pb2-pb**2)/(2*sn2**2),np.array([qeqimax] )),np.array([qeqimin] ))   # Qeq inverse (23)
+    qiav=sum(qeqi)/nFFT2              # Average over all frequencies (23+12 lines) (ignore non-duplication of DC and nyquist terms)
+    bc=1+av*np.sqrt(qiav)              # bias correction factor (23+11 lines)
+    bmind=1+2*(nd-1)*(1-md)/(qeqi**(-1)-2*md)      # we use the signalmplified form (17) instead of (15)
+    bminv=1+2*(nv-1)*(1-mv)/(qeqi**(-1)-2*mv)    # same expressignalon but for sub windows
+    kmod=(bc*p*bmind) < actmin      # Frequency mask for new minimum
 
-        if any(kmod):
-            actmin[kmod]=bc*p[kmod]*bmind[kmod]
-            actminsub[kmod]=bc*p[kmod]*bminv[kmod]
+    if any(kmod):
+        actmin[kmod]=bc*p[kmod]*bmind[kmod]
+        actminsub[kmod]=bc*p[kmod]*bminv[kmod]
 
-        if subwc>1 and subwc<nv:              # middle of buffer - allow a local minimum
-            lminflag= np.logical_or(lminflag,kmod)    	# potential local minimum frequency bins
-            pminu=min_complex(actminsub,pminu)
-            sn2=pminu.copy()
-        else:
-            if subwc>=nv:                   # end of buffer - do a buffer switch
-                ibuf=1+(ibuf%nu)     	# increment actbuf storage pointer
-                actbuf[ibuf-1,:]=actmin.copy()   	# save sub-window minimum
-                pminu=min_complex_mat(actbuf)
-                i=np.nonzero(np.array(qiav )<qith)
-                nsm=nsms[i[0][0]]     	# noise slope max
-                lmin = np.logical_and(np.logical_and(np.logical_and(lminflag,np.logical_not(kmod)),actminsub<(nsm*pminu)),actminsub>pminu)
-                if any(lmin):
-                    pminu[lmin]=actminsub[lmin]
-                    actbuf[:,lmin]= np.ones((nu,1)) * pminu[lmin]
-                lminflag[:]=0
-                actmin[:]=np.Inf
-                subwc=0
+    if (subwc > 1) and (subwc < nv):              # middle of buffer - allow a local minimum
+        lminflag= np.logical_or(lminflag,kmod)    	# potential local minimum frequency bins
+        pminu=min_complex(actminsub,pminu)
+        sn2=pminu.copy()
+    else:
+        if subwc>=nv:                   # end of buffer - do a buffer switch
+            ibuf=1+(ibuf%nu)     	# increment actbuf storage pointer
+            actbuf[ibuf-1,:]=actmin.copy()   	# save sub-window minimum
+            pminu=min_complex_mat(actbuf)
+            i=np.nonzero(np.array(qiav )<qith)
+            nsm=nsms[i[0][0]]     	# noise slope max
+            lmin = np.logical_and(np.logical_and(np.logical_and(lminflag,np.logical_not(kmod)),actminsub<(nsm*pminu)),actminsub>pminu)
+            if any(lmin):
+                pminu[lmin]=actminsub[lmin]
+                actbuf[:,lmin]= np.ones((nu,1)) * pminu[lmin]
+            lminflag[:]=0
+            actmin[:]=np.Inf
+            subwc=0
 
-        subwc=subwc+1
-        x[t,:]=sn2.copy()
-        qisq=np.sqrt(qeqi)
-        # empirical formula for standard error based on Fig 15 of [2]
-        xs[t,:]=sn2*np.sqrt(0.266*(nd+100*qisq)*qisq/(1+0.005*nd+6/nd)/(0.5*qeqi**(-1)+nd-1))
-
-
+    subwc=subwc+1
+    x = sn2.copy()
+    
     return x
 
 def mhvals(*args):
@@ -340,77 +300,3 @@ def min_complex_mat(a):
         j = np.argmin(np.absolute(a[:,i]))
         m[i] = a[j,i]
     return m
-
-def VAD(signal, sr, nFFT=512, win_length=0.025, hop_length=0.01, theshold=0.7):
-    """Voice Activity Detector
-    Parameters
-    ----------
-    signal      : audio time series
-    sr    		: sampling rate of `signal`
-    nFFT     	: length of the FFT window
-    win_length 	: window size in sec
-    hop_length 	: hop size in sec
-    Returns
-    -------
-    probRatio   : frame-based voice activity probability sequence
-    """
-    signal=signal.astype('float')
-
-    maxPosteriorSNR= 1000   
-    minPosteriorSNR= 0.0001    
-
-    win_length_sample = math.ceil(win_length*sr)
-    hop_length_sample = math.ceil(hop_length*sr)    
-
-    # the variance of the speech; lambda_x(k)
-    _stft = stft(signal, n_fft=nFFT, win_length=win_length_sample, hop_length=hop_length_sample)
-    pSpectrum = np.abs(_stft) ** 2                     
-    
-    # estimate the variance of the noise using minimum statistics noise PSD estimation ; lambda_d(k). 
-    estNoise = estnoisem(pSpectrum,hop_length)     
-    estNoise = estNoise
-    
-    aPosterioriSNR=pSpectrum/estNoise                    
-    aPosterioriSNR=aPosterioriSNR
-    aPosterioriSNR[aPosterioriSNR > maxPosteriorSNR] = maxPosteriorSNR
-    aPosterioriSNR[aPosterioriSNR < minPosteriorSNR] = minPosteriorSNR
-
-    a01=hop_length/0.05     # a01=P(signallence->speech)  hop_length/mean signallence length (50 ms)
-    a00=1-a01               # a00=P(signallence->signallence)
-    a10=hop_length/0.1      # a10=P(speech->signallence) hop/mean talkspurt length (100 ms)
-    a11=1-a10               # a11=P(speech->speech)
-
-    b01=a01/a00
-    b10=a11-a10*a01/a00
-  
-    smoothFactorDD=0.99
-    previousGainedaPosSNR=1 
-    (nFrames,nFFT2) = pSpectrum.shape                
-    probRatio=np.zeros((nFrames,1))
-    logGamma_frame=0                          
-    for i in range(nFrames):                         
-        aPosterioriSNR_frame = aPosterioriSNR[i,:]                  
-        
-        #operator [2](52)
-        oper=aPosterioriSNR_frame-1
-        oper[oper < 0] = 0 
-        smoothed_a_priori_SNR = smoothFactorDD * previousGainedaPosSNR + (1-smoothFactorDD) * oper
-        
-        #V for MMSE estimate ([2](8)) 
-        V=0.1*smoothed_a_priori_SNR*aPosterioriSNR_frame/(1+smoothed_a_priori_SNR)            
-        
-        #geometric mean of log likelihood ratios for individual frequency band  [1](4)
-        logLRforFreqBins=2*V-np.log(smoothed_a_priori_SNR+1)              
-        # logLRforFreqBins=np.exp(smoothed_a_priori_SNR*aPosterioriSNR_frame/(1+smoothed_a_priori_SNR))/(1+smoothed_a_priori_SNR)
-        gMeanLogLRT=np.mean(logLRforFreqBins)       
-        logGamma_frame=np.log(a10/a01) + gMeanLogLRT + np.log(b01+b10/( a10+a00*np.exp(-logGamma_frame) ) )
-        probRatio[i]=1/(1+np.exp(-logGamma_frame))
-        
-        #Calculate Gain function which results from the MMSE [2](7).
-        gain = (math.gamma(1.5) * np.sqrt(V)) / aPosterioriSNR_frame * np.exp(-1 * V / 2) * ((1 + V) * bessel(0, V / 2) + V * bessel(1, V / 2))
-    
-        previousGainedaPosSNR = (gain**2) * aPosterioriSNR_frame
-        probRatio[probRatio>theshold]=1
-        probRatio[probRatio<theshold]=0
-
-    return probRatio
