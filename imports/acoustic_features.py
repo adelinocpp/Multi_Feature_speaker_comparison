@@ -159,7 +159,7 @@ class AcousticsFeatures:
         else:
             n_frames = int(np.floor((num_samples - n_win_length) / n_step_length) + 1)
     
-        
+       
         n_FFT = int(2 ** np.ceil(np.log2(n_win_length)))
         h_FFT = int(0.5*n_FFT)
         # --- algumas janelas espectrais
