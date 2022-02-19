@@ -17,7 +17,7 @@ class queue:
         self.Queue_iNumElem = 0
     def queue_poll(self):
         if (self.Queue_iNumElem <= 0):
-            print('Error: No elements')
+            # print('Error: No elements')
             return 
         ad_x =  self.Queue_aad_P[self.Queue_iHead, :]
         self.Queue_iHead    = np.mod(self.Queue_iHead + 1, self.Queue_iWindow)       

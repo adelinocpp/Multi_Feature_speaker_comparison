@@ -113,7 +113,7 @@ def build_bark_tiang_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0):
         wts[i,:] = np.maximum(np.zeros((h_fft,)), np.min(limits,axis=0))
     return wts
 # -----------------------------------------------------------------------------
-def build_erb_gamma_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0,halfMag=True):
+def build_erb_gamma_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0,halfMag=True,gamma_align=True):
     if (max_freq == 0):
         max_freq = 0.5*sr
     min_erb, _ = hertz2erb(min_freq)
@@ -130,19 +130,19 @@ def build_erb_gamma_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0,halfMag=True)
         wts = np.zeros((nfilts, h_fft))
         for i in range(0,nfilts):
             f_mid, _ = erb2hertz(min_erb + (i+1)*step_erb)
-            wts[i,:] = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag)
+            wts[i,:] = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag,align=gamma_align)
         return wts
     else:
-        wts = np.zeros((nfilts, h_fft))
-        pts = np.zeros((nfilts, h_fft))
+        wts = np.zeros((nfilts, nfft))
+        pts = np.zeros((nfilts, nfft))
         for i in range(0,nfilts):
             f_mid, _ = erb2hertz(min_erb + (i+1)*step_erb)
-            m, p = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag)
+            m, p = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag,align=gamma_align)
             wts[i,:] = m
             pts[i,:] = p
         return wts, pts
 # -----------------------------------------------------------------------------    
-def build_mel_gamma_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0,halfMag=True):
+def build_mel_gamma_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0,halfMag=True,gamma_align=True):
     if (max_freq == 0):
         max_freq = 0.5*sr
     min_mel = hertz2mel(min_freq)
@@ -159,14 +159,14 @@ def build_mel_gamma_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0,halfMag=True)
         wts = np.zeros((nfilts, h_fft))
         for i in range(0,nfilts):
             f_mid, _ = mel2hertz(min_mel + (i+1)*step_mel)
-            wts[i,:] = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag)
+            wts[i,:] = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag,align=gamma_align)
         return wts
     else:
-        wts = np.zeros((nfilts, h_fft))
-        pts = np.zeros((nfilts, h_fft))
+        wts = np.zeros((nfilts, nfft))
+        pts = np.zeros((nfilts, nfft))
         for i in range(0,nfilts):
-            f_mid, _ = mel2hertz(min_mel + (i+1)*step_mel)
-            m, p = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag)
+            f_mid = mel2hertz(min_mel + (i+1)*step_mel)
+            m, p = gammatone_filter(f_mid,bin_hertz,onlyhalfMag=halfMag,align=gamma_align)
             wts[i,:] = m
             pts[i,:] = p
         return wts, pts

@@ -14,7 +14,7 @@ import config as c
 # import matplotlib.pyplot as plt
 from sklearn.neighbors import KernelDensity
 from .build_filters import build_bark_plp_filters, build_mel_tiang_filters, \
-                        build_erb_gamma_filters
+                        build_erb_gamma_filters, build_mel_gamma_filters
 from .rasta_plp_functions import postaud, do_lpc, lpc2cep, lifter, rasta_filter
 from scipy import signal
 from .vad_functions import estnoisem_frame, bessel
@@ -59,7 +59,7 @@ def build_folders_to_save(file_name):
             os.mkdir(curDir)
 # -----------------------------------------------------------------------------
 class Feature:
-    def __init__(self,data=np.empty([]),computed=True):
+    def __init__(self,data=np.empty([]),computed=False):
         self.data = data
         self.computed = computed
 # -----------------------------------------------------------------------------
@@ -191,9 +191,9 @@ class AcousticsFeatures:
         mfcc_mel_filters = build_mel_tiang_filters(n_FFT,self.sample_rate,\
                     nfilts=c.NUM_MFCC_FILTERS)
         gamma_mel_filters = build_erb_gamma_filters(p_FFT,self.sample_rate,\
-                    nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq)            
-        teocc_mel_filters = build_erb_gamma_filters(p_FFT,self.sample_rate,\
-                    nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq) 
+                    nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq)
+        teocc_mel_mag, teocc_mel_pha = build_mel_gamma_filters(p_FFT,self.sample_rate,\
+                    nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq,halfMag=False)
         # ======================================================================
         # --- VETORES E MATRIZES DE SAIDA --------------------------------------
         data_spectogram = np.empty((h_FFT,0))
