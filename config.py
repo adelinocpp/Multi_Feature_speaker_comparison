@@ -28,5 +28,8 @@ WIN_SIZE = 0.025
 STEP_SIZE = 0.01
 # ------------------------------------------------------------------------------
 NUM_PLP_FILTERS = 17
+NUM_MFCC_FILTERS = 13
+NUM_PNCC_FILTERS = 35
 NUM_CEPS_COEFS = 13
-PLP_SUM_POWER = False
+# PLP_DITHER = False
+PLP_SUM_POWER = True
