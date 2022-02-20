@@ -7,12 +7,9 @@ Created on Wed Jan 26 12:59:30 2022
 """
 import config as c
 from imports.files_utils import list_contend
-# from pathlib import Path
 from imports.acoustic_features import AcousticsFeatures
 from imports.AudioData import AudioData
-# import subprocess
 import pickle
-# import os
         
 CONVERT_AUDIO_TO_PROCESS = False
 COMPUTE_TRAIN_FEATURES = True

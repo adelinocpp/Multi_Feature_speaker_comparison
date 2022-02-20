@@ -20,7 +20,6 @@ from scipy import signal
 from .vad_functions import estnoisem_frame, bessel
 from .pncc_functions import queue
 import math
-
 # -----------------------------------------------------------------------------
 def dct_aps(x, K=0):
     N = x.shape[0]
@@ -74,9 +73,9 @@ class AcousticsFeatures:
         self.features = {"spectogram":  Feature(), # v
                          "time_domain": np.empty([]), # v
                          "freq_domain": np.empty([]), # v
-                         "spc_entropy": Feature(), # v
+                         "spc_entropy": Feature(computed=False), # v
                          "LTAS":        Feature(),
-                         "vad_sonh":    Feature(computed = False), #v
+                         "vad_sonh":    Feature(), #v
                          "S2NR":        Feature(),
                          "pitch":       Feature(),
                          "formants":    Feature(),
@@ -114,6 +113,41 @@ class AcousticsFeatures:
         
     def get_feature_file(self):
         return self.feature_file
+    
+    def apply_feature(self,feature_name = '', x=[], checkComputed=True):
+        if (feature_name == ''):
+            return
+        else:
+            if not (feature_name in self.features):
+                return
+            else:
+                if (not self.features[feature_name].computed):
+                    self.features[feature_name].data = x
+                    self.features[feature_name].computed = checkComputed
+                return 
+        return
+        
+    def apply_delta(self,feature_name = '', delta=True, delta_delta=True, checkComputed=True):
+        if (feature_name == ''):
+            return
+        else:
+            if not (feature_name in self.features):
+                return
+            else:
+                x = self.features[feature_name].data
+                d_x = computeD(x)
+                dd_x = computeD(d_x)
+                if (delta and not delta_delta):
+                    self.features[feature_name].data = np.concatenate((x,d_x),axis=0)                        
+                if (not delta and delta_delta):
+                    self.features[feature_name].data = np.concatenate((x,dd_x),axis=0)
+                if (delta and delta_delta):
+                    self.features[feature_name].data = np.concatenate((x,d_x,dd_x),axis=0)
+                self.features[feature_name].computed = checkComputed
+                return 
+        return
+        
+        
 # -----------------------------------------------------------------------------
     def compute_features(self):
         if (self.file_name == ''):
@@ -220,7 +254,7 @@ class AcousticsFeatures:
             data_time = np.append(data_time,(time_idx+0.5*n_win_length)/self.sample_rate);
             
             # -- ESPECTOGRAMA, MFCC
-            if (not self.features["spectogram"].computed):
+            if (not self.features["spectogram"].computed) or (not self.features["spc_entropy"].computed):
                 # --- ESPECTOGRAMA
                 win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
                 abs_fft = np.abs(win_fft[:h_FFT])
@@ -399,38 +433,24 @@ class AcousticsFeatures:
             t_frame += 1  
         # --- FIM DO CALCULO POR FRAME -----------------------------------------       
         # ======================================================================
-        # TODO implementar uma função derivadas para as caracteristicas
         # --- Entropia espectral -----------------------------------------------
         if (not self.features["spc_entropy"].computed):
-            if (self.features["spectogram"].computed):
+            if (not ("data_spectogram" in locals())) and (self.features["spectogram"].computed):
                 data_spectogram = self.features["spectogram"].data
             prob_mtx = np.empty(data_spectogram.shape)
             for idx in range (0,h_FFT):
-                X = data_spectogram[idx,:][:, np.newaxis]    
+                # X = data_spectogram[idx,:][:, np.newaxis]    
+                X = data_spectogram[idx,:].reshape(-1,1)
                 kde = KernelDensity(kernel='gaussian').fit(X)
                 prob_mtx[idx,:] = np.exp(kde.score_samples(X))
-                entropy_mtx = np.sum(np.multiply(prob_mtx,np.log(prob_mtx)),axis=0)        
+            entropy_mtx = np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)        
         # ----------------------------------------------------------------------
-        # --- CONTINUA MFCC
-        if (not self.features["mfcc"].computed):
-            d_mfcc_spec = computeD(mfcc_spec)
-            dd_mfcc_spec = computeD(d_mfcc_spec)
-            mfcc_spec = np.concatenate((mfcc_spec,d_mfcc_spec,dd_mfcc_spec),axis=0)
-        # --- CONTINUA PNCC
-        if (not self.features["pncc"].computed):
-            d_pncc_spec = computeD(pncc_spec)
-            dd_pncc_spec = computeD(d_pncc_spec)
-            pncc_spec = np.concatenate((pncc_spec,d_pncc_spec,dd_pncc_spec),axis=0)
-        
         # --- CONTINUA PLP e RASTA-PLP
         if (not self.features["plp"].computed):
             aspectrum_plp = postaud(aud_spec,sr/2)
             lpc = do_lpc(aspectrum_plp,c.NUM_CEPS_COEFS)
             cep = lpc2cep(lpc,c.NUM_CEPS_COEFS+1)
             plp_mtx   = lifter(cep,0.6)
-            d_plp_mtx = computeD(plp_mtx)
-            dd_plp_mtx = computeD(d_plp_mtx)
-            plp_mtx = np.concatenate((plp_mtx,d_plp_mtx,dd_plp_mtx),axis=0)
         if (not self.features["rasta_plp"].computed):
             aspectrum_rasta = np.empty(aud_spec.shape)
             for idx in range(0,aud_spec.shape[0]):
@@ -439,44 +459,23 @@ class AcousticsFeatures:
             lpc = do_lpc(aspectrum_rasta,c.NUM_CEPS_COEFS)
             cep = lpc2cep(lpc,c.NUM_CEPS_COEFS+1)
             rasta_plp_mtx   = lifter(cep,0.6)
-            d_rasta_plp_mtx = computeD(rasta_plp_mtx)
-            dd_rasta_plp_mtx = computeD(d_rasta_plp_mtx)
-            rasta_plp_mtx = np.concatenate((rasta_plp_mtx,d_rasta_plp_mtx,dd_rasta_plp_mtx),axis=0)
-        
-        # ======================================================================
-        # TODO implementar uma função de check para as caracteristicas
+        # ======================================================================        
         self.features["time_domain"] = data_time
         self.features["freq_domain"] = data_freq_domain
-        if (not self.features["mfec"].computed):
-            self.features["mfec"].data = mfec_spec
-            self.features["mfec"].computed = True   
-        if (not self.features["teocc"].computed):
-            self.features["teocc"].data = teocc_spec
-            self.features["teocc"].computed = True   
-        if (not self.features["vad_sonh"].computed):
-            self.features["vad_sonh"].data = vad_sonh
-            self.features["vad_sonh"].computed = True    
-        if (not self.features["spectogram"].computed):
-            self.features["spectogram"].data = data_spectogram
-            self.features["spectogram"].computed = True    
-        if (not self.features["spc_entropy"].computed):
-            self.features["spc_entropy"].data = entropy_mtx
-            self.features["spc_entropy"].computed = True        
-        if (not self.features["plp"].computed):
-            self.features["plp"].data = plp_mtx
-            self.features["plp"].computed = True        
-        if (not self.features["rasta_plp"].computed):
-            self.features["rasta_plp"].data = rasta_plp_mtx
-            self.features["rasta_plp"].computed = True        
-        if (not self.features["mfcc"].computed):
-            self.features["mfcc"].data = mfcc_spec
-            self.features["mfcc"].computed = True
-        if (not self.features["pncc"].computed):
-            self.features["pncc"].data = pncc_spec
-            self.features["pncc"].computed = True  
+        self.apply_feature("spectogram",data_spectogram)
+        self.apply_feature("spc_entropy",entropy_mtx)
+        # self.apply_delta("spc_entropy")
+        self.apply_feature("vad_sonh",vad_sonh)
+        self.apply_feature("mfec",mfec_spec)
+        self.apply_delta("mfec")
+        self.apply_feature("teocc",teocc_spec)
+        self.apply_delta("teocc")
+        self.apply_feature("mfcc",mfcc_spec)
+        self.apply_delta("mfcc")
+        self.apply_feature("plp",plp_mtx)
+        self.apply_delta("plp")
+        self.apply_feature("rasta-plp",rasta_plp_mtx)
+        self.apply_delta("rasta-plp")
+        self.apply_feature("pncc",pncc_spec)
+        self.apply_delta("pncc")
         # ======================================================================    
-            
-            
-            
-            
-            
