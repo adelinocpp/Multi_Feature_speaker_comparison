@@ -20,6 +20,41 @@ from scipy import signal
 from .vad_functions import estnoisem_frame, bessel
 from .pncc_functions import queue
 import math
+
+# -----------------------------------------------------------------------------
+def time_entropy(x):
+    X = x.reshape(-1,1)
+    band = 1  # 1.06*np.std(x)
+    kde = KernelDensity(kernel='gaussian',bandwidth=band).fit(X)
+    prob_mtx = np.exp(kde.score_samples(X))*band
+    return -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)     
+# -----------------------------------------------------------------------------
+def shift(arr, num, fill_value):
+    result = np.empty_like(arr)
+    if num > 0:
+        result[:num] = fill_value
+        result[num:] = arr[:-num]
+    elif num < 0:
+        result[num:] = fill_value
+        result[:num] = arr[-num:]
+    else:
+        result[:] = arr
+    return result
+# -----------------------------------------------------------------------------
+def teager_energy_operator(x):
+    xl = shift(x, 1, 0)
+    xp = shift(x, -1, 0)
+    return np.sum(np.abs(np.power(x,2) - np.multiply(xl,xp)))/len(x)
+# -----------------------------------------------------------------------------
+def mag_phase_filter(f_x, f_m, f_p):
+    n_x = len(f_x)
+    n_m = len(f_m)
+    if (n_m < n_x):
+        f_m = np.append(f_m,np.flip(f_m))
+        f_p = np.append(f_p,np.flip(-f_p))
+    
+    y_m_f = np.multiply(f_m,np.exp(1j*f_p))
+    return np.real(scipy.fft.ifft(np.multiply(f_x,y_m_f)))
 # -----------------------------------------------------------------------------
 def dct_aps(x, K=0):
     N = x.shape[0]
@@ -58,7 +93,7 @@ def build_folders_to_save(file_name):
             os.mkdir(curDir)
 # -----------------------------------------------------------------------------
 class Feature:
-    def __init__(self,data=np.empty([]),computed=False):
+    def __init__(self,data=np.empty([]),computed=True):
         self.data = data
         self.computed = computed
 # -----------------------------------------------------------------------------
@@ -73,7 +108,7 @@ class AcousticsFeatures:
         self.features = {"spectogram":  Feature(), # v
                          "time_domain": np.empty([]), # v
                          "freq_domain": np.empty([]), # v
-                         "spc_entropy": Feature(computed=False), # v
+                         "spc_entropy": Feature(), # v
                          "LTAS":        Feature(),
                          "vad_sonh":    Feature(), #v
                          "S2NR":        Feature(),
@@ -85,8 +120,8 @@ class AcousticsFeatures:
                          "rasta_plp":   Feature(), # v
                          "ssch":        Feature(),
                          "zcpa":        Feature(),
-                         "teocc":       Feature(),
-                         "mfec":        Feature()
+                         "teocc":       Feature(), # v
+                         "mfec":        Feature(computed=False)
                          };
     
     def check_compute_completed(self, feature_name = ''):
@@ -226,8 +261,8 @@ class AcousticsFeatures:
                     nfilts=c.NUM_MFCC_FILTERS)
         gamma_mel_filters = build_erb_gamma_filters(p_FFT,self.sample_rate,\
                     nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq)
-        teocc_mel_mag, teocc_mel_pha = build_mel_gamma_filters(p_FFT,self.sample_rate,\
-                    nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq,halfMag=False)
+        teocc_mel_mag, teocc_mel_pha = build_mel_gamma_filters(n_FFT,self.sample_rate,\
+                    nfilts=c.NUM_MFCC_FILTERS,min_freq=wFreq,halfMag=False)
         # ======================================================================
         # --- VETORES E MATRIZES DE SAIDA --------------------------------------
         data_spectogram = np.empty((h_FFT,0))
@@ -271,8 +306,6 @@ class AcousticsFeatures:
                     frame_mag_spec[idx_aud] = np.matmul(mfcc_mel_filters[idx_aud,:],abs_fft)
                 frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
                 mfcc_spec = np.append(mfcc_spec,frame_cep,axis=1)
-                
-            
             # --- VAD
             if (not self.features["vad_sonh"].computed):
                 if not ("abs_fft" in locals()):
@@ -315,13 +348,29 @@ class AcousticsFeatures:
             if (not self.features["teocc"].computed):
                 if not ("abs_fft" in locals()):
                     win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
-                    abs_fft = np.abs(win_fft[:h_FFT])
+                    
+                frame_mag_spec = np.empty((c.NUM_MFCC_FILTERS,1))
+                for idx_aud in range(0,c.NUM_MFCC_FILTERS): 
+                    frame_time_filter = mag_phase_filter(win_fft,teocc_mel_mag[idx_aud,:], teocc_mel_pha[idx_aud,:])
+                    frame_mag_spec[idx_aud] = teager_energy_operator(frame_time_filter)
+                
+                frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
+                teocc_spec = np.append(teocc_spec,frame_cep,axis=1)
+                
                 
              # --- MFEC
             if (not self.features["mfec"].computed):
                 if not ("abs_fft" in locals()):
                     win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
                     abs_fft = np.abs(win_fft[:h_FFT])
+                    
+                frame_mag_spec = np.empty((c.NUM_MFCC_FILTERS,1))
+                for idx_aud in range(0,c.NUM_MFCC_FILTERS): 
+                    frame_time_filter = mag_phase_filter(win_fft,mfcc_mel_filters[idx_aud,:], np.zeros(mfcc_mel_filters[idx_aud,:].shape))
+                    frame_mag_spec[idx_aud] = time_entropy(frame_time_filter)
+                
+                frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
+                mfec_spec = np.append(mfec_spec,frame_cep,axis=1)
                 
             # --- PNCC
             if (not self.features["pncc"].computed):
@@ -443,7 +492,7 @@ class AcousticsFeatures:
                 X = data_spectogram[idx,:].reshape(-1,1)
                 kde = KernelDensity(kernel='gaussian').fit(X)
                 prob_mtx[idx,:] = np.exp(kde.score_samples(X))
-            entropy_mtx = np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)        
+            entropy_mtx = -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)        
         # ----------------------------------------------------------------------
         # --- CONTINUA PLP e RASTA-PLP
         if (not self.features["plp"].computed):
