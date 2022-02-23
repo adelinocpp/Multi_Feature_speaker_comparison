@@ -45,6 +45,7 @@ if (COMPUTE_TRAIN_FEATURES):
             features = AcousticsFeatures(file_name=audio_file_name, )
             features.compute_features()
             features.save_preps(c.AUDIO_TRAIN_PATH,c.FEATURES_TRAIN_PATH)
+            features.check_nan()
             with open(features.get_feature_file(), 'wb') as f:
                 pickle.dump(features,f)
             print('Finalizado arquivo {:4} de {:4}'.format(idx, len(file_list)-1));

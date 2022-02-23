@@ -13,49 +13,17 @@ from pathlib import Path
 import config as c
 # import matplotlib.pyplot as plt
 from sklearn.neighbors import KernelDensity
-from .build_filters import build_bark_plp_filters, build_mel_tiang_filters, \
+from .build_filters import build_bark_plp_filters, build_mel_triang_filters, \
                         build_erb_gamma_filters, build_mel_gamma_filters
 from .rasta_plp_functions import postaud, do_lpc, lpc2cep, lifter, rasta_filter
 from scipy import signal
 from .vad_functions import estnoisem_frame, bessel
 from .pncc_functions import queue
 from .teocc_functions import teager_energy_operator
+from .zcpa_functions import zcpa_histogram
+from .signal_process_util import mag_phase_filter, dct_aps, vector_entropy
 import math
 
-# -----------------------------------------------------------------------------
-# TODO: verify time entropy
-def time_entropy(x):
-    X = x.reshape(-1,1)
-    band = 1  # 1.06*np.std(x)
-    kde = KernelDensity(kernel='gaussian',bandwidth=band).fit(X)
-    prob_mtx = np.exp(kde.score_samples(X))*band
-    return -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)     
-
-# -----------------------------------------------------------------------------
-def mag_phase_filter(f_x, f_m, f_p):
-    n_x = len(f_x)
-    n_m = len(f_m)
-    if (n_m < n_x):
-        f_m = np.append(f_m,np.flip(f_m))
-        f_p = np.append(f_p,np.flip(-f_p))
-    
-    y_m_f = np.multiply(f_m,np.exp(1j*f_p))
-    return np.real(scipy.fft.ifft(np.multiply(f_x,y_m_f)))
-# -----------------------------------------------------------------------------
-def dct_aps(x, K=0):
-    N = x.shape[0]
-    if (K == 0) or (K > N):
-        K = N
-    c = np.zeros((K,1))
-    Mconst = np.sqrt(2/K)
-    for k in range(0,K):
-        if (k == 0):
-            beta = 1/np.sqrt(2)
-        else:
-            beta = 1
-        kSum = [x[n]*np.cos(k*np.pi/N*(0.5+n)) for n in range(0,N)]
-        c[k] = Mconst*beta*np.sum(kSum)
-    return c
 # -----------------------------------------------------------------------------
 def computeD(x,p=2):
     nDim, nframe = x.shape
@@ -79,7 +47,7 @@ def build_folders_to_save(file_name):
             os.mkdir(curDir)
 # -----------------------------------------------------------------------------
 class Feature:
-    def __init__(self,data=np.empty([]),computed=True):
+    def __init__(self,data=np.empty([]),computed=False):
         self.data = data
         self.computed = computed
 # -----------------------------------------------------------------------------
@@ -105,9 +73,9 @@ class AcousticsFeatures:
                          "plp":         Feature(), # v
                          "rasta_plp":   Feature(), # v
                          "ssch":        Feature(),
-                         "zcpa":        Feature(),
+                         "zcpa":        Feature(), # v
                          "teocc":       Feature(), # v
-                         "mfec":        Feature(computed=False)
+                         "mfec":        Feature()  # v
                          };
     
     def check_compute_completed(self, feature_name = ''):
@@ -167,6 +135,19 @@ class AcousticsFeatures:
                 self.features[feature_name].computed = checkComputed
                 return 
         return
+     
+    def check_nan(self):
+        return_value = True
+        for idx in enumerate(self.features):
+            key = list(self.features)[idx]
+            if (not self.features[key].computed):
+                continue
+            mtx = self.features[key].data
+            n_NAN = np.sum(np.isfinite(mtx)==False)
+            if (n_NAN > 0):
+                print('Feature {:} has a non-finite value\n',key)
+            
+        return return_value
         
         
 # -----------------------------------------------------------------------------
@@ -243,7 +224,7 @@ class AcousticsFeatures:
         # --- Filtros para componentes
         plp_bark_filters = build_bark_plp_filters(n_FFT,self.sample_rate,\
                     nfilts=c.NUM_PLP_FILTERS)
-        mfcc_mel_filters = build_mel_tiang_filters(n_FFT,self.sample_rate,\
+        mfcc_mel_filters = build_mel_triang_filters(n_FFT,self.sample_rate,\
                     nfilts=c.NUM_MFCC_FILTERS)
         gamma_mel_filters = build_erb_gamma_filters(p_FFT,self.sample_rate,\
                     nfilts=c.NUM_PNCC_FILTERS,min_freq=wFreq)
@@ -334,8 +315,9 @@ class AcousticsFeatures:
                 vad_sonh = np.append(vad_sonh,probRatio)
              # --- TEOCC
             if (not self.features["teocc"].computed):
-                if not ("abs_fft" in locals()):
-                    win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
+                win_fft = scipy.fft.fft(win_audio,n=n_FFT)
+                # if not ("win_fft" in locals()):
+                    # win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
                     
                 frame_mag_spec = np.empty((c.NUM_MFCC_FILTERS,1))
                 for idx_aud in range(0,c.NUM_MFCC_FILTERS): 
@@ -344,20 +326,25 @@ class AcousticsFeatures:
                 
                 frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
                 teocc_spec = np.append(teocc_spec,frame_cep,axis=1)
-                
-                
-             # --- MFEC
+            # --- ZCPA
+            if (not self.features["zcpa"].computed):
+                win_fft = scipy.fft.fft(win_audio,n=n_FFT)
+                frame_mag_spec = zcpa_histogram(win_fft,self.sample_rate,c.NUM_CEPS_COEFS)
+                frame_cep = dct_aps(frame_mag_spec,c.NUM_CEPS_COEFS)
+                zcpa_spec = np.append(zcpa_spec,frame_cep,axis=1)
+            # --- MFEC
             if (not self.features["mfec"].computed):
-                if not ("abs_fft" in locals()):
-                    win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
-                    abs_fft = np.abs(win_fft[:h_FFT])
+                win_fft = scipy.fft.fft(win_audio,n=n_FFT)
+                # if not ("win_fft" in locals()):
+                    # win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
+                    # abs_fft = np.abs(win_fft[:h_FFT])
                     
                 frame_mag_spec = np.empty((c.NUM_MFCC_FILTERS,1))
                 for idx_aud in range(0,c.NUM_MFCC_FILTERS): 
                     frame_time_filter = mag_phase_filter(win_fft,mfcc_mel_filters[idx_aud,:], np.zeros(mfcc_mel_filters[idx_aud,:].shape))
-                    frame_mag_spec[idx_aud] = time_entropy(frame_time_filter)
+                    frame_mag_spec[idx_aud] = vector_entropy(frame_time_filter)
                 
-                frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
+                frame_cep = dct_aps(frame_mag_spec,c.NUM_CEPS_COEFS)
                 mfec_spec = np.append(mfec_spec,frame_cep,axis=1)
                 
             # --- PNCC
@@ -372,7 +359,7 @@ class AcousticsFeatures:
                 if (bSSF):
                     # print('Nothing for while')
                     qObj = queue(iM, iNumFilts)
-                    # Ring buffer (using a Queue)
+                    # --- Ring buffer (using a Queue)
                     if (t_frame > 2 * iM):
                         qObj.queue_poll()
             
@@ -477,10 +464,11 @@ class AcousticsFeatures:
                 data_spectogram = self.features["spectogram"].data
             prob_mtx = np.empty(data_spectogram.shape)
             for idx in range (0,h_FFT):
-                # X = data_spectogram[idx,:][:, np.newaxis]    
                 X = data_spectogram[idx,:].reshape(-1,1)
                 kde = KernelDensity(kernel='gaussian').fit(X)
                 prob_mtx[idx,:] = np.exp(kde.score_samples(X))
+                
+                
             entropy_mtx = -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)        
         # ---------------------------------------------------------------------
         # --- CONTINUA PLP e RASTA-PLP
@@ -518,4 +506,5 @@ class AcousticsFeatures:
         self.apply_delta("rasta-plp")
         self.apply_feature("pncc",pncc_spec)
         self.apply_delta("pncc")
+        
         # ======================================================================    
