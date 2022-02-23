@@ -19,32 +19,18 @@ from .rasta_plp_functions import postaud, do_lpc, lpc2cep, lifter, rasta_filter
 from scipy import signal
 from .vad_functions import estnoisem_frame, bessel
 from .pncc_functions import queue
+from .teocc_functions import teager_energy_operator
 import math
 
 # -----------------------------------------------------------------------------
+# TODO: verify time entropy
 def time_entropy(x):
     X = x.reshape(-1,1)
     band = 1  # 1.06*np.std(x)
     kde = KernelDensity(kernel='gaussian',bandwidth=band).fit(X)
     prob_mtx = np.exp(kde.score_samples(X))*band
     return -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)     
-# -----------------------------------------------------------------------------
-def shift(arr, num, fill_value):
-    result = np.empty_like(arr)
-    if num > 0:
-        result[:num] = fill_value
-        result[num:] = arr[:-num]
-    elif num < 0:
-        result[num:] = fill_value
-        result[:num] = arr[-num:]
-    else:
-        result[:] = arr
-    return result
-# -----------------------------------------------------------------------------
-def teager_energy_operator(x):
-    xl = shift(x, 1, 0)
-    xp = shift(x, -1, 0)
-    return np.sum(np.abs(np.power(x,2) - np.multiply(xl,xp)))/len(x)
+
 # -----------------------------------------------------------------------------
 def mag_phase_filter(f_x, f_m, f_p):
     n_x = len(f_x)
@@ -274,6 +260,8 @@ class AcousticsFeatures:
         mfec_spec = np.empty((c.NUM_CEPS_COEFS,0))
         # --- TEOCC
         teocc_spec = np.empty((c.NUM_CEPS_COEFS,0))
+        # --- ZCPA
+        zcpa_spec = np.empty((c.NUM_CEPS_COEFS,0))
         # --- PLP e RAST-PLP         
         aud_spec = np.empty((c.NUM_PLP_FILTERS,0))
         # --- MFCC
@@ -480,9 +468,10 @@ class AcousticsFeatures:
   
     
             t_frame += 1  
-        # --- FIM DO CALCULO POR FRAME -----------------------------------------       
-        # ======================================================================
-        # --- Entropia espectral -----------------------------------------------
+        # --- FIM DO CALCULO POR FRAME ----------------------------------------       
+        # =====================================================================
+        # --- Entropia espectral ----------------------------------------------
+        # TODO: verificar a forma de calcular a entropia espectral (usar integral?)
         if (not self.features["spc_entropy"].computed):
             if (not ("data_spectogram" in locals())) and (self.features["spectogram"].computed):
                 data_spectogram = self.features["spectogram"].data
@@ -493,7 +482,7 @@ class AcousticsFeatures:
                 kde = KernelDensity(kernel='gaussian').fit(X)
                 prob_mtx[idx,:] = np.exp(kde.score_samples(X))
             entropy_mtx = -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)        
-        # ----------------------------------------------------------------------
+        # ---------------------------------------------------------------------
         # --- CONTINUA PLP e RASTA-PLP
         if (not self.features["plp"].computed):
             aspectrum_plp = postaud(aud_spec,sr/2)
@@ -519,6 +508,8 @@ class AcousticsFeatures:
         self.apply_delta("mfec")
         self.apply_feature("teocc",teocc_spec)
         self.apply_delta("teocc")
+        self.apply_feature("zcpa",zcpa_spec)
+        self.apply_delta("zcpa")
         self.apply_feature("mfcc",mfcc_spec)
         self.apply_delta("mfcc")
         self.apply_feature("plp",plp_mtx)
