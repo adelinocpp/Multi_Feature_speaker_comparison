@@ -8,7 +8,41 @@ Created on Wed Feb 23 13:27:33 2022
 import numpy as np
 import scipy
 from sklearn.neighbors import KernelDensity
+from scipy import signal
 
+# -----------------------------------------------------------------------------
+def levinson_aps(r, p):
+    X = np.zeros((p,p))
+    r_w = r[0:p]
+    r_c = r_w[::-1]
+    for idx in range(0,p):
+        if (idx == 0):
+            X[idx,:] = r_w
+        else:
+            X[idx,:] = np.roll(r_c,idx+1)
+    b = -r[1:p+1]
+    a = np.linalg.lstsq(X, b.T,rcond=None)[0]
+    G = r[0] - np.matmul(a.T,r[1:p+1])
+    a = np.concatenate(([1],a))
+    return a, G
+# -----------------------------------------------------------------------------
+def lpc_aps(x,p):
+    npts = len(x)
+    hpts = int(np.ceil(0.5*npts))
+    x_corr = signal.correlate(x,x, mode='same', method='fft')
+    return levinson_aps(x_corr[-hpts:], p)
+
+# -----------------------------------------------------------------------------
+def simpson_integral(t,f):
+    Nf = len(f)
+    N = len(t)
+    if not (N == Nf):
+        print('Inetgral error: diffent number of points')
+        return 0
+    h = (t[-1]-t[0])/(N - 1)
+    I_simp = (h/3) * (f[0] + 2*np.sum(f[:N-2:2]) \
+            + 4*np.sum(f[1:N-1:2]) + f[N-1])
+    return I_simp
 # -----------------------------------------------------------------------------
 def vector_entropy(x):
     X = x.reshape(-1,1)
@@ -16,14 +50,15 @@ def vector_entropy(x):
     xMean = np.mean(x)
     band = 1.06*xStd*(len(x)**(-1/5))
     Nden = 250
-    h = 7*xStd/(Nden+1)
     x_dom = np.linspace(xMean-3.5*xStd, xMean+3.5*xStd, num=Nden)
     kde = KernelDensity(kernel='gaussian',bandwidth=band).fit(X)
     prob_mtx = np.exp(kde.score_samples(x_dom.reshape(-1,1)))
     f = np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps))
-    I_simp = (h/3) * (f[0] + 2*np.sum(f[:Nden-2:2]) \
-            + 4*np.sum(f[1:Nden-1:2]) + f[Nden-1])
-    return -I_simp
+    return - simpson_integral(x_dom,f)
+    # h = 7*xStd/(Nden+1)
+    # I_simp = (h/3) * (f[0] + 2*np.sum(f[:Nden-2:2]) \
+    #         + 4*np.sum(f[1:Nden-1:2]) + f[Nden-1])
+    # return -I_simp
 # -----------------------------------------------------------------------------
 def mag_phase_filter(f_x, f_m, f_p):
     n_x = len(f_x)

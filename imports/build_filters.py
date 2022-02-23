@@ -113,6 +113,28 @@ def build_bark_triang_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0):
         wts[i,:] = np.maximum(np.zeros((h_fft,)), np.min(limits,axis=0))
     return wts
 # -----------------------------------------------------------------------------
+def build_bark_retang_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0):
+    if (max_freq == 0):
+        max_freq = 0.5*sr
+    min_mel = hertz2bark(min_freq)
+    nyq_mel = hertz2bark(max_freq) - min_mel
+    if (nfilts == 0):
+        nfilts = np.ceil(4.6*np.log10(sr))
+        # nfilts = np.ceil(nyq_mel) + 1
+    h_fft = int(0.5*nfft)
+    wts = np.zeros((nfilts, h_fft))
+    step_mel = nyq_mel/(nfilts+1)
+    bin_hertz = np.array([i*sr/nfft for i in range(0,h_fft)])
+    limits = np.empty((2,h_fft))
+    for i in range(0,nfilts):
+        f_ini = bark2hertz(min_mel + i*step_mel)
+        f_fim = bark2hertz(min_mel + (i+2)*step_mel)
+        
+        limits[0,:] = (bin_hertz <= f_fim).astype(np.float)
+        limits[1,:] = (bin_hertz >= f_ini).astype(np.float)
+        wts[i,:] = np.multiply(limits[0,:],limits[0,:])
+    return wts
+# -----------------------------------------------------------------------------
 def build_erb_triang_filters(nfft,sr,nfilts=0,min_freq=0,max_freq=0):
     if (max_freq == 0):
         max_freq = 0.5*sr

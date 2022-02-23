@@ -10,21 +10,8 @@ import numpy.matlib as npm
 import scipy
 from scipy import signal
 from .convert_frequency import bark2hertz, hertz2bark
-# -----------------------------------------------------------------------------
-def levinson_aps(r, p):
-    X = np.zeros((p,p))
-    r_w = r[0:p]
-    r_c = r_w[::-1]
-    for i in range(0,p):
-        if (i == 0):
-            X[i,:] = r_w
-        else:
-            X[i,:] = np.roll(r_c,i+1)
-    b = -r[1:p+1]
-    a = np.linalg.lstsq(X, b.T,rcond=None)[0]
-    G = r[0] - np.matmul(a.T,r[1:p+1])
-    a = np.concatenate(([1],a))
-    return a, G
+from .signal_process_util import levinson_aps
+
 # -----------------------------------------------------------------------------
 def postaud(x,fmax,broaden=0):
     nbands,nframes = x.shape
