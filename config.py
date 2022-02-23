@@ -12,7 +12,9 @@ Created on Wed Jan 26 12:59:30 2022
 
 # ------------------------------------------------------------------------------
 SAMPLE_RATE = 8000
-CHANNELS = 1
+CHANNELS = '1'
+CODEC = 'PCM'
+FILE_TYPE = 'WAV'
 # ------------------------------------------------------------------------------
 # Etapa 1 calculo de caracteristicas pragmaticas
 # Audios de entrada
@@ -27,6 +29,11 @@ FEATURES_VALID_PATH = '../BaseDadosFeatures/Validacao/'
 WIN_SIZE = 0.025
 STEP_SIZE = 0.01
 # ------------------------------------------------------------------------------
+# ==============================================================================
+# Dados para calculo das características
+# --- FORMANTES
+# com base nas caracter
+
 NUM_PLP_FILTERS = 17
 NUM_MFCC_FILTERS = 13
 NUM_PNCC_FILTERS = 35

@@ -23,10 +23,10 @@ class AudioData:
         self.sr =  returnStr.read().decode()[0:-1]
         
     def check(self,ext,codec,channels,sr):
-        return (self.sr == sr) and (self.codec == codec) and \
-            (self.channels == channels) and (self.suffix == ext)
+        return (self.sr == str(sr)) and (self.codec == codec) and \
+            (self.channels == str(channels)) and (self.suffix == ext.upper())
 
-    def suit(self,ext,channels,sr):
+    def suit(self,new_ext,channels,sr):
         dir_path = Path(self.audioFullPath).parent
         basename = Path(self.audioFullPath).stem
         ext = Path(self.audioFullPath).suffix
@@ -34,7 +34,7 @@ class AudioData:
         temp_file_name = dir_path.as_posix() + '/temp' + ext
         cmdString = 'mv {:} {:}'.format(self.audioFullPath,temp_file_name)
         subprocess.Popen(cmdString, shell=True, stdout=subprocess.PIPE).stdout
-        new_file_name = dir_path.as_posix() + '/' +  basename + '.' + ext.lower()
+        new_file_name = dir_path.as_posix() + '/' +  basename + '.' + new_ext.lower()
         # --- Convert file
         cmdString = 'sox {:} -c {:} -r {:} -e signed-integer -b 16 {:}'.format(temp_file_name,channels,sr,new_file_name)
         subprocess.Popen(cmdString, shell=True, stdout=subprocess.PIPE).stdout

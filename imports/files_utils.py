@@ -19,7 +19,7 @@ def list_contend(folder='./', pattern=()):
     list_files = [os.path.join(root, name)
              for root, dirs, files in os.walk(folder)
                  for name in files
-                     if name.endswith(pattern)]
+                     if name.upper().endswith(pattern)]
     return list_files
 # ------------------------------------------------------------------------------
 
