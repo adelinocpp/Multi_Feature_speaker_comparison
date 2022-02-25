@@ -31,12 +31,17 @@ STEP_SIZE = 0.01
 # ------------------------------------------------------------------------------
 # ==============================================================================
 # Dados para calculo das características
+# --- PRE-ENFASE
+PRE_ENPHASIS_COEF = 0.975
 # --- FORMANTES
-# com base nas caracter
-
-NUM_PLP_FILTERS = 17
-NUM_MFCC_FILTERS = 13
-NUM_PNCC_FILTERS = 35
+# com base nas caracteriticas do audio e SAMPLE_RATE
 NUM_CEPS_COEFS = 13
-# PLP_DITHER = False
+# --- MFCC
+MFCC_NUM_FILT = 13
+# --- PLP and RASPA-PLP
+PLP_NUM_FILTERS = 17
 PLP_SUM_POWER = True
+PLP_LIFTER_COEF = 0.6
+# --- PNCC
+PNCC_NUM_FILTERS = 35
+# PLP_DITHER = False
