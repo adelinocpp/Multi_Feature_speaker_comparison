@@ -16,10 +16,12 @@ def build_folders_to_save(file_name):
             os.mkdir(curDir)
 # ------------------------------------------------------------------------------
 def list_contend(folder='./', pattern=()):
+    pattern = tuple([x.upper() for x in pattern])
     list_files = [os.path.join(root, name)
              for root, dirs, files in os.walk(folder)
                  for name in files
                      if name.upper().endswith(pattern)]
+    list_files.sort()
     return list_files
 # ------------------------------------------------------------------------------
 
