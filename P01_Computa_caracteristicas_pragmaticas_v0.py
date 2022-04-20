@@ -50,6 +50,16 @@ def thread_compute_features(obj_features, osNiceVal):
     print('Finalizado arquivo {:4} de {:4}'.format(idx, len(file_list)-1))        
 # -----------------------------------------------------------------------------
 
+def check_exist_feature_file(audio_file_name,audio_path,feture_file_list,feature_path):
+    file_stem = Path(audio_file_name).stem
+    audio_file = Path(audio_file_name).name
+    file_feature = audio_file_name.replace(audio_path,feature_path)
+    file_feature = file_feature.replace(audio_file,file_stem + '.p')
+    result = (file_feature in feture_file_list) and os.path.exists(file_feature)
+    if (result == False):
+        file_feature = ''
+    return result, file_feature
+
 if (CONVERT_AUDIO_TO_PROCESS):
     pattern = ('.3gp','.aa','.aac','.aax','.act','.aiff','.amr','.ape','.au',
                '.awb','.dct','.dss','.dvf','.flac','.gsm','.iklax','.ivs',
@@ -68,6 +78,7 @@ if (CONVERT_AUDIO_TO_PROCESS):
                 file_list[index] = AudioData(audio_file_name).suit(c.FILE_TYPE,c.CHANNELS,c.SAMPLE_RATE)
         except:
             continue
+
 
 
 if (COMPUTE_FEATURES):
@@ -124,5 +135,4 @@ if (COMPUTE_FEATURES):
                     num_free_cores =  num_cores - sum([core.is_alive() for core in set_cores])
                     break
         
-            
-        
+          

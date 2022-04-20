@@ -280,7 +280,6 @@ class AcousticsFeatures:
         for time_idx in range(0,num_samples-n_win_length+1,n_step_length):
             win_audio = audio[time_idx:time_idx+n_win_length]
             data_time = np.append(data_time,(time_idx+0.5*n_win_length)/self.sample_rate);
-            
             # --- FORMANTES ---------------------------------------------------
             if (not self.features["formants"].computed):
                 frame_fmt = np.zeros((2*n_formants + 1,))
