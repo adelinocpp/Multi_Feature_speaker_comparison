@@ -21,6 +21,7 @@ FILE_TYPE = 'WAV'
 AUDIO_FILE_INPUT = '../BaseDadosAudios/'
 # Caracteristicas de saida
 FEATURE_FILE_OUTPUT = '../BaseDadosFeatures/'
+DB_TIME_INFO_FILE = '../BaseDadosFeatures/dbFeatureVadTimeInfo.txt'
 
 '''
 A separação em conjunto de treinamento, teste e validação será realizado depois 

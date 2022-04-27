@@ -3,10 +3,43 @@
 import numpy as np
 from scipy.special import jv
 
+
+
 def bessel(v, X):
     return ((1j**(-v))*jv(v,1j*X)).real
-   
-def estnoisem_frame(pSpectrum,hop_length, p):
+# -----------------------------------------------------------------------------
+class estnoisem_frame_param:
+    def __init__(self, p_init, nFFT2):
+        self.t      = 0
+        self.p      = p_init         # smoothed power spectrum
+        self.ac     = 1              # correction factor (9)
+        self.sn2    = self.p         # estimated noise power
+        self.pb     = self.p               # smoothed noisy speech power (20)
+        self.pb2    = self.pb**2
+        self.pminu  = self.p
+        self.actmin = np.array(np.ones(nFFT2) * np.Inf)   # Running minimum estimate
+        self.actminsub = np.array(np.ones(nFFT2) * np.Inf)          # sub-window minimum estimate
+        self.subwc  = 0
+        self.actbuf = 0  # buffer to store subwindow minima
+        self.ibuf   = 0
+        self.lminflag = np.zeros(nFFT2)      # flag to remember local minimum
+        
+    def set_param(self,t,p,ac,sn2,pb,pb2,pminu,actmin, actminsub, subwc, actbuf, ibuf, lminflag):
+        self.t      = t
+        self.p      = p
+        self.ac     = ac 
+        self.sn2    = sn2
+        self.pb     = pb
+        self.pb2    = pb2
+        self.pminu  = pminu
+        self.actmin = actmin
+        self.actminsub = actminsub
+        self.subwc  = subwc
+        self.actbuf = actbuf
+        self.ibuf   = ibuf
+        self.lminflag = lminflag
+# -----------------------------------------------------------------------------        
+def estnoisem_frame(pSpectrum,hop_length, param_em):
     nFFT2 = pSpectrum.shape[0]          # number of frames and freq bins
     x = np.zeros((nFFT2,))            # initialize output arrays
 
@@ -45,18 +78,26 @@ def estnoisem_frame(pSpectrum,hop_length, p):
     qeqimax=1/qeqmin  # maximum value of Qeq inverse (23)
     qeqimin=1/qeqmax # minumum value of Qeq per frame inverse
     
-    ac=1               # correction factor (9)
-    sn2=p              # estimated noise power
-    pb=p               # smoothed noisy speech power (20)
-    pb2=pb**2
-    pminu=p
-    actmin=np.array(np.ones(nFFT2) * np.Inf)   # Running minimum estimate
-    actminsub=np.array(np.ones(nFFT2) * np.Inf)          # sub-window minimum estimate
-    subwc=nv                   # force a buffer switch on first loop
-    actbuf=np.array(np.ones((nu,nFFT2)) * np.Inf)  # buffer to store subwindow minima
-    ibuf=0
-    lminflag=np.zeros(nFFT2)      # flag to remember local minimum
-
+    t       = param_em.t 
+    p       = param_em.p 
+    ac      = param_em.ac               # correction factor (9)
+    sn2     = param_em.sn2              # estimated noise power
+    pb      = param_em.pb           # smoothed noisy speech power (20)
+    pb2     = param_em.pb2
+    pminu   = param_em.pminu
+    actmin  = param_em.actmin
+    actminsub = param_em.actminsub
+    if (param_em.subwc == 0):
+        subwc = nv
+    else:
+        subwc   = param_em.subwc                   # force a buffer switch on first loop
+    if (type(param_em.actbuf) == int):
+        actbuf  = np.array(np.ones((nu,nFFT2)) * np.Inf)
+    else:    
+        actbuf  = param_em.actbuf
+    ibuf    = param_em.ibuf
+    lminflag = param_em.lminflag
+ 
     # loop for each frame
    
     acb=(1+(sum(p) / (sum(pSpectrum) + 1e-9)-1)**2)**(-1)    # alpha_c-bar(t)  (9) ( + 1e-9 add by adelino)
@@ -79,7 +120,7 @@ def estnoisem_frame(pSpectrum,hop_length, p):
     pb=b*pb + (1-b)*p            # smoothed periodogram (20)
     pb2=b*pb2 + (1-b)*p**2     	 # smoothed periodogram squared (21)
 
-    qeqi = max_complex(min_complex((pb2-pb**2)/(2*sn2**2),np.array([qeqimax] )),np.array([qeqimin] ))   # Qeq inverse (23)
+    qeqi = max_complex(min_complex((pb2-pb**2)/(2*sn2**2),np.array([qeqimax] )),np.array([qeqimin/(t+1)] ))   # Qeq inverse (23)
     qiav=sum(qeqi)/nFFT2              # Average over all frequencies (23+12 lines) (ignore non-duplication of DC and nyquist terms)
     bc=1+av*np.sqrt(qiav)              # bias correction factor (23+11 lines)
     bmind=1+2*(nd-1)*(1-md)/(qeqi**(-1)-2*md)      # we use the signalmplified form (17) instead of (15)
@@ -111,8 +152,8 @@ def estnoisem_frame(pSpectrum,hop_length, p):
 
     subwc=subwc+1
     x = sn2.copy()
-    
-    return x
+    param_em.set_param(t+1,p,ac,sn2,pb,pb2,pminu,actmin, actminsub, subwc, actbuf, ibuf, lminflag)
+    return x, param_em
 
 def mhvals(*args):
     """
