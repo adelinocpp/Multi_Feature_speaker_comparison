@@ -46,7 +46,7 @@ def computeD(x,p=2):
     return dMtx    
 # =============================================================================
 class Feature:
-    def __init__(self,data=np.empty([]),computed=False, name=""):
+    def __init__(self,data=np.empty([]),computed=True):
         self.data = data
         self.computed = computed
         self.name = name
@@ -309,7 +309,6 @@ class AcousticsFeatures:
         # ======================================================================
         # -- - INICIO DO CALCULO POR FRAME ------------------------------------
         t_frame = 0
-        
         for time_idx in range(0,num_samples-n_win_length+1,n_step_length):
             win_audio_ori = audio_ori[time_idx:time_idx+n_win_length]
             win_audio = audio[time_idx:time_idx+n_win_length]
