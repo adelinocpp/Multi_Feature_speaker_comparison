@@ -10,13 +10,14 @@ import librosa
 import scipy
 from pathlib import Path
 import config as c
+import sys
 # import matplotlib.pyplot as plt
 from sklearn.neighbors import KernelDensity
 from .build_filters import build_bark_plp_filters, build_mel_triang_filters, \
                         build_erb_gamma_filters, build_mel_gamma_filters
 from .rasta_plp_functions import postaud, do_lpc, lpc2cep, lifter, rasta_filter
 from scipy import signal
-from .vad_functions import estnoisem_frame, bessel
+from .vad_functions import estnoisem_frame, bessel, estnoisem_frame_param
 from .pncc_functions import queue
 from .teocc_functions import teager_energy_operator
 from .zcpa_functions import zcpa_histogram
@@ -31,19 +32,24 @@ def computeD(x,p=2):
     dMtx = np.zeros((nDim, nframe))
     for i in range(p,nframe- p):
         n = np.zeros((nDim,))
-        d = 0;
+        d = 0
         for j in range(1,p+1):
-            n0 = j*(x[:,i+j] - x[:,i-j])
-            n0.shape = (nDim,1)
+#            if ()
+#                n0 = j*(x[:,i+j] - x[:,i-j])
+#                n0.shape = (nDim,1)
+            if (np.sum(np.isfinite(x[:,i+j])==False) > 0) or \
+               (np.sum(np.isfinite(x[:,i-j])==False) > 0):
+                continue
             n = np.add(n,j*(x[:,i+j] - x[:,i-j]))
             d += j**2;
         dMtx[:,i] = np.divide(n,(2*d))
     return dMtx    
 # =============================================================================
 class Feature:
-    def __init__(self,data=np.empty([]),computed=True):
+    def __init__(self,data=np.empty([]),computed=False, name=""):
         self.data = data
         self.computed = computed
+        self.name = name
 # =============================================================================        
 
 # =============================================================================
@@ -56,24 +62,66 @@ class AcousticsFeatures:
         self.audio_file_name = file_name
         self.feature_file = ''
         self.sample_rate = 0;
-        self.features = {"spectogram":  Feature(), # v
-                         "time_domain": Feature(), # v
-                         "freq_domain": Feature(), # v
-                         "spc_entropy": Feature(), # v
-                         "LTAS":        Feature(),
-                         "vad_sonh":    Feature(), # v
-                         "S2NR":        Feature(), 
-                         "pitch":       Feature(), 
-                         "formants":    Feature(), # v 
+        self.features = {"spectogram":  Feature(computed=True), # v
+                         "time_domain": Feature(computed=True), # v
+                         "freq_domain": Feature(computed=True), # v
+                         "spc_entropy": Feature(computed=True), # v
+                         "LTAS":        Feature(computed=True),
+                         "vad_sohn":    Feature(), # v
+                         "S2NR":        Feature(computed=True), 
+                         "pitch":       Feature(computed=True), 
+                         "formants":    Feature(computed=True), # v 
                          "mfcc":        Feature(), # v
-                         "pncc":        Feature(), # v
-                         "plp":         Feature(), # v
-                         "rasta_plp":   Feature(), # v
-                         "ssch":        Feature(), # v
-                         "zcpa":        Feature(), # v
-                         "teocc":       Feature(), # v
-                         "mfec":        Feature()  # v
+                         "pncc":        Feature(computed=True), # v
+                         "plp":         Feature(computed=True), # v
+                         "rasta_plp":   Feature(computed=True), # v
+                         "ssch":        Feature(computed=True), # v
+                         "zcpa":        Feature(computed=True), # v
+                         "teocc":       Feature(computed=True), # v
+                         "mfec":        Feature(computed=True)  # v
                          };
+        self.needUpdate = {"spectogram":  False,
+                           "time_domain": False,
+                           "freq_domain": False,
+                           "spc_entropy": False,
+                           "LTAS":        False,
+                           "vad_sohn":    False,
+                           "S2NR":        False,
+                           "pitch":       False,
+                           "formants":    False,
+                           "mfcc":        False,
+                           "pncc":        False,
+                           "plp":         False,
+                           "rasta_plp":   False,
+                           "ssch":        False,
+                           "zcpa":        False,
+                           "teocc":       False,
+                           "mfec":        False,
+                           };
+    # -------------------------------------------------------------------------
+    def get_feature_by_name(self, feature_name, filter_vad=True, removeNotFinite=True):
+        if not (self.features[feature_name].computed):
+            return Feature().data
+        sel_feature = self.features[feature_name].data
+        if (filter_vad):
+            vadIDX = (self.features["vad_sohn"].data == 1.0).nonzero()[0]
+            sel_feature = sel_feature[:,vadIDX]  
+        infiniteMtx = (np.isfinite(sel_feature)==False)
+        n_NAN = np.sum(infiniteMtx)        
+        if ((n_NAN > 0) and removeNotFinite):
+            idxFinite = (np.sum(infiniteMtx,axis=0) == 0).nonzero()[0]
+            print("Remove not finite {:} length {:}".format(n_NAN,len(idxFinite)))
+            sel_feature = sel_feature[:,idxFinite]
+        return sel_feature
+    # -------------------------------------------------------------------------
+    def get_feature_time(self, feature_name, filter_vad=True):
+        if not (self.features[feature_name].computed):
+            return 0
+        sel_feature = self.features[feature_name].data
+        if (filter_vad):
+            vadIDX = (self.features["vad_sohn"].data == 1.0).nonzero()[0]
+            sel_feature = sel_feature[:,vadIDX]     
+        return sel_feature.shape[1]*self.step_length 
     # -------------------------------------------------------------------------
     def check_compute_completed(self, feature_name = ''):
         return_value = True
@@ -90,6 +138,7 @@ class AcousticsFeatures:
         return False
     # -------------------------------------------------------------------------
     def save_preps(self, audio_path, feature_path):
+        # preparacao para salvar o arquivo
         file_stem = Path(self.audio_file_name).stem
         audio_file = Path(self.audio_file_name).name
         file_feature = self.audio_file_name.replace(audio_path,feature_path)
@@ -113,13 +162,13 @@ class AcousticsFeatures:
                 return 
         return
     # -------------------------------------------------------------------------  
-    def apply_delta(self,feature_name = '', delta=True, delta_delta=True, checkComputed=True):
+    def apply_delta(self,feature_name = '', delta=True, delta_delta=True, checkComputed=True, Force =False):
         if (feature_name == ''):
             return
         else:
             if not (feature_name in self.features):
                 return
-            else:
+            elif (not (self.features[feature_name].computed) or Force):
                 x = self.features[feature_name].data
                 if (np.sum(x.shape) == 0):
                     return
@@ -160,6 +209,7 @@ class AcousticsFeatures:
         self.sample_rate = sr
         # ======================================================================
         # --- pre-enfasis ------------------------------------------------------
+        audio_ori = audio
         audio = signal.lfilter(np.array([1, -c.PRE_ENPHASIS_COEF]), np.array([1]), audio,axis=0)
         # ======================================================================
         num_samples = len(audio)        
@@ -234,7 +284,7 @@ class AcousticsFeatures:
         data_freq_domain = np.array([0.5*i*self.sample_rate/h_FFT for i in range(0,h_FFT)])
         data_time = np.empty((1,0))
         # --- VAD 
-        vad_sonh = np.empty((1,0))
+        vad_sohn = np.empty((1,0))
         # --- MFEC
         mfec_spec = np.empty((c.NUM_CEPS_COEFS,0))
         # --- TEOCC
@@ -259,11 +309,12 @@ class AcousticsFeatures:
         # ======================================================================
         # -- - INICIO DO CALCULO POR FRAME ------------------------------------
         t_frame = 0
+        
         for time_idx in range(0,num_samples-n_win_length+1,n_step_length):
+            win_audio_ori = audio_ori[time_idx:time_idx+n_win_length]
             win_audio = audio[time_idx:time_idx+n_win_length]
             data_time = np.append(data_time,(time_idx+0.5*n_win_length)/self.sample_rate);
-            
-            # --- FORMANTES
+            # --- FORMANTES ---------------------------------------------------
             if (not self.features["formants"].computed):
                 frame_fmt = np.zeros((2*n_formants + 1,))
                 a_lpc, g_lpc = lpc_aps(win_audio*hann_win, lpc_ord)
@@ -278,7 +329,7 @@ class AcousticsFeatures:
                 frame_fmt[(n_formants+1):(n_formants+1+aux_n_fmt)] = aux_bw[idx_fmt]
                 frame_fmt.shape = (2*n_formants + 1,1)
                 formant_mtx = np.append(formant_mtx,frame_fmt,axis=1)
-            # -- ESPECTOGRAMA
+            # -- ESPECTOGRAMA -------------------------------------------------
             if (not self.features["spectogram"].computed) or (not self.features["spc_entropy"].computed):
                 # --- ESPECTOGRAMA
                 win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
@@ -286,26 +337,30 @@ class AcousticsFeatures:
                 spec = 20*np.log10(abs_fft)
                 spec.shape = (h_FFT,1)
                 data_spectogram = np.append(data_spectogram,spec,axis=1)
-            # --- MFCC
+            # --- MFCC --------------------------------------------------------
             if (not self.features["mfcc"].computed):
-                if not ("abs_fft" in locals()):
-                    win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
-                    abs_fft = np.abs(win_fft[:h_FFT])
+                win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
+                abs_fft = np.abs(win_fft[:h_FFT])
                 frame_mag_spec = np.empty((c.MFCC_NUM_FILTERS,1))
                 for idx_aud in range(0,c.MFCC_NUM_FILTERS): 
                     frame_mag_spec[idx_aud] = np.matmul(mfcc_mel_filters[idx_aud,:],abs_fft)
                 frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
                 mfcc_spec = np.append(mfcc_spec,frame_cep,axis=1)
-            # --- VAD
-            if (not self.features["vad_sonh"].computed):
-                if not ("abs_fft" in locals()):
-                    win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
-                    abs_fft = np.abs(win_fft[:h_FFT])
-                pwr_fft = np.power(abs_fft,2)
+            # --- VAD ---------------------------------------------------------
+            if (not self.features["vad_sohn"].computed):
+                # if not ("abs_fft" in locals()):
+                #     win_fft = scipy.fft.fft(win_audio*hamming_win,n=n_FFT)
+                #     abs_fft = np.abs(win_fft[:h_FFT])
+                # if not ("win_fft_ori" in locals()):
+                win_fft_ori = scipy.fft.fft(win_audio_ori*hamming_win,n=n_FFT)
+                abs_fft_ori = np.abs(win_fft_ori[:h_FFT])
+                pwr_fft = abs_fft_ori ** 2  # np.power(abs_fft,2)
+                # pwr_fft = abs_fft ** 2  # np.power(abs_fft,2)
+                
                 if (t_frame == 0):
-                    noise_pwd = pwr_fft
+                    param_em_fr=estnoisem_frame_param(pwr_fft, h_FFT)
                     
-                estNoise = estnoisem_frame(pwr_fft,self.step_length, noise_pwd)   
+                estNoise, param_em_fr = estnoisem_frame(pwr_fft,self.step_length, param_em_fr)   
                 aPosterioriSNR_frame = np.divide(pwr_fft,estNoise)
                 aPosterioriSNR_frame[aPosterioriSNR_frame > maxPosteriorSNR] = maxPosteriorSNR
                 aPosterioriSNR_frame[aPosterioriSNR_frame < minPosteriorSNR] = minPosteriorSNR
@@ -315,26 +370,26 @@ class AcousticsFeatures:
                 smoothed_a_priori_SNR = smoothFactorDD * previousGainedaPosSNR + (1-smoothFactorDD) * oper
                 
                 #V for MMSE estimate ([2](8)) 
-                V=0.1*smoothed_a_priori_SNR*aPosterioriSNR_frame/(1+smoothed_a_priori_SNR)            
+                V = 0.1*smoothed_a_priori_SNR*aPosterioriSNR_frame/(1+smoothed_a_priori_SNR)            
                 
                 #geometric mean of log likelihood ratios for individual frequency band  [1](4)
                 logLRforFreqBins=2*V-np.log(smoothed_a_priori_SNR+1)              
                 # logLRforFreqBins=np.exp(smoothed_a_priori_SNR*aPosterioriSNR_frame/(1+smoothed_a_priori_SNR))/(1+smoothed_a_priori_SNR)
                 gMeanLogLRT=np.mean(logLRforFreqBins)       
-                logGamma_frame=np.log(a10/a01) + gMeanLogLRT + np.log(b01+b10/( a10+a00*np.exp(-logGamma_frame) ) )
+                logGamma_frame = np.log(a10/a01) + gMeanLogLRT + np.log(b01+b10/( a10+a00*np.exp(-logGamma_frame) ) )
                 probRatio = 1/(1+np.exp(-logGamma_frame))
                 
                 #Calculate Gain function which results from the MMSE [2](7).
                 gain = (math.gamma(1.5) * np.sqrt(V)) / aPosterioriSNR_frame * np.exp(-1 * V / 2) * ((1 + V) * bessel(0, V / 2) + V * bessel(1, V / 2))
             
                 previousGainedaPosSNR = (gain**2) * aPosterioriSNR_frame
-                if (probRatio > theshold):
-                    probRatio = 1
-                else:
-                    probRatio = 0        
-                
-                vad_sonh = np.append(vad_sonh,probRatio)
-             # --- TEOCC
+                vad_sohn = np.append(vad_sohn,probRatio)
+                # if (probRatio > theshold):
+                #     probRatio = 1
+                # else:
+                #     probRatio = 0        
+                # vad_sohn = np.append(vad_sohn,probRatio)
+             # --- TEOCC ------------------------------------------------------
             if (not self.features["teocc"].computed):
                 win_fft = scipy.fft.fft(win_audio,n=n_FFT)    
                 frame_mag_spec = np.empty((c.MFCC_NUM_FILTERS,1))
@@ -344,19 +399,19 @@ class AcousticsFeatures:
                 
                 frame_cep = dct_aps(np.log(frame_mag_spec),c.NUM_CEPS_COEFS)
                 teocc_spec = np.append(teocc_spec,frame_cep,axis=1)
-            # --- ZCPA
+            # --- ZCPA --------------------------------------------------------
             if (not self.features["zcpa"].computed):
                 win_fft = scipy.fft.fft(win_audio,n=n_FFT)
                 frame_mag_spec = zcpa_histogram(win_fft,self.sample_rate,c.NUM_CEPS_COEFS)
                 frame_cep = dct_aps(frame_mag_spec,c.NUM_CEPS_COEFS)
                 zcpa_spec = np.append(zcpa_spec,frame_cep,axis=1)
-            # --- SSCH
+            # --- SSCH --------------------------------------------------------
             if (not self.features["ssch"].computed):
                 win_fft = scipy.fft.fft(win_audio,n=n_FFT)
                 frame_mag_spec = ssch_histogram(win_fft[:h_FFT],self.sample_rate,c.NUM_CEPS_COEFS)
                 frame_cep = dct_aps(frame_mag_spec,c.NUM_CEPS_COEFS)
                 ssch_spec = np.append(ssch_spec,frame_cep,axis=1)
-            # --- MFEC
+            # --- MFEC --------------------------------------------------------
             if (not self.features["mfec"].computed):
                 win_fft = scipy.fft.fft(win_audio,n=n_FFT)
                 frame_mag_spec = np.empty((c.MFCC_NUM_FILTERS,1))
@@ -367,7 +422,7 @@ class AcousticsFeatures:
                 frame_cep = dct_aps(frame_mag_spec,c.NUM_CEPS_COEFS)
                 mfec_spec = np.append(mfec_spec,frame_cep,axis=1)
                 
-            # --- PNCC
+            # --- PNCC --------------------------------------------------------
             if (not self.features["pncc"].computed):
                 iNumFilts = c.PNCC_NUM_FILTERS
                 # --- *** outro valor de NFFT
@@ -479,6 +534,7 @@ class AcousticsFeatures:
         # --- Entropia espectral ----------------------------------------------
         # TODO: verificar a forma de calcular a entropia espectral (usar integral?)
         if (not self.features["spc_entropy"].computed):
+            print("spc_entropy not computed")
             if (not ("data_spectogram" in locals())) and (self.features["spectogram"].computed):
                 data_spectogram = self.features["spectogram"].data
             prob_mtx = np.empty(data_spectogram.shape)
@@ -491,12 +547,12 @@ class AcousticsFeatures:
             entropy_mtx = -np.sum(np.multiply(prob_mtx,np.log(prob_mtx + np.finfo(float).eps)),axis=0)        
         # ---------------------------------------------------------------------
         # --- CONTINUA PLP e RASTA-PLP
-        if (not self.features["plp"].computed):
+        if (not self.features["plp"].computed) and ("aud_spec" in locals()):
             aspectrum_plp = postaud(aud_spec,sr/2)
             lpc = do_lpc(aspectrum_plp,c.NUM_CEPS_COEFS)
             cep = lpc2cep(lpc,c.NUM_CEPS_COEFS+1)
             plp_mtx   = lifter(cep,c.PLP_LIFTER_COEF)
-        if (not self.features["rasta_plp"].computed):
+        if (not self.features["rasta_plp"].computed) and ("aud_spec" in locals()):
             aspectrum_rasta = np.empty(aud_spec.shape)
             for idx in range(0,aud_spec.shape[0]):
                 aspectrum_rasta[idx,:] = np.exp(rasta_filter(np.log(aud_spec[idx,:])))         
@@ -505,7 +561,10 @@ class AcousticsFeatures:
             cep = lpc2cep(lpc,c.NUM_CEPS_COEFS+1)
             rasta_plp_mtx   = lifter(cep,c.PLP_LIFTER_COEF)
         # ======================================================================        
-        
+        if (not self.features["vad_sohn"].computed) and ("vad_sohn" in locals()) \
+            and (vad_sohn.size > 0):
+            vad_sohn[vad_sohn>theshold]=1
+            vad_sohn[vad_sohn<theshold]=0
         # for idx in enumerate(self.features):
         #     key = list(self.features)[idx]
         #     if (not self.features[key].computed):
@@ -515,21 +574,21 @@ class AcousticsFeatures:
         self.apply_feature("spectogram",data_spectogram)
         self.apply_feature("spc_entropy",entropy_mtx)
         # self.apply_delta("spc_entropy")
-        self.apply_feature("vad_sonh",vad_sonh)
+        self.apply_feature("vad_sohn",vad_sohn)
         self.apply_feature("mfec",mfec_spec)
-        self.apply_delta("mfec")
+        # self.apply_delta("mfec",Force =True)
         self.apply_feature("teocc",teocc_spec)
-        self.apply_delta("teocc")
+        # self.apply_delta("teocc",Force =True)
         self.apply_feature("zcpa",zcpa_spec)
-        self.apply_delta("zcpa")
+        # self.apply_delta("zcpa",Force =True)
         self.apply_feature("ssch",ssch_spec)
-        self.apply_delta("ssch")
+        # self.apply_delta("ssch",Force =True)
         self.apply_feature("mfcc",mfcc_spec)
-        self.apply_delta("mfcc")
+        # self.apply_delta("mfcc",Force =True)
         self.apply_feature("plp",plp_mtx)
-        self.apply_delta("plp")
+        # self.apply_delta("plp",Force =True)
         self.apply_feature("rasta-plp",rasta_plp_mtx)
-        self.apply_delta("rasta-plp")
+        # self.apply_delta("rasta-plp",Force =True)
         self.apply_feature("pncc",pncc_spec)
-        self.apply_delta("pncc")
+        # self.apply_delta("pncc",Force =True)
         # ======================================================================    

@@ -11,7 +11,7 @@ from .convert_frequency import hertz2bark, bark2hertz, hertz2mel, mel2hertz, \
 from .build_filters import build_mel_triang_filters, build_erb_triang_filters, \
                         build_bark_triang_filters
 from .signal_process_util import mag_phase_filter
-from .teocc_functions import shift                            
+from .teocc_functions import shift              
 # -----------------------------------------------------------------------------
 def zcpa_histogram(x_fft, sr, nfilts, timeWin = 0.025, min_freq=0,max_freq=0, typefilter='bark'):
     n_FFT = len(x_fft)

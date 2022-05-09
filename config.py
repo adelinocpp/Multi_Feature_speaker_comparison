@@ -18,6 +18,24 @@ FILE_TYPE = 'WAV'
 # ------------------------------------------------------------------------------
 # Etapa 1 calculo de caracteristicas pragmaticas
 # Audios de entrada
+AUDIO_FILE_INPUT = '../BaseDadosAudios/'
+# Caracteristicas de saida
+FEATURE_FILE_LIST = '../BaseDadosFeatures/dbFeatureFileList.txt'
+FEATURE_FILE_OUTPUT = '../BaseDadosFeatures/'
+DB_TIME_INFO_FILE = '../BaseDadosFeatures/dbFeatureVadTimeInfo.txt'
+DB_TIME_SEPR_FILE = '../BaseDadosFeatures/dbTrainingGroups.txt'
+
+DB_POOL_EXPERIMENT = "../BaseDadosNormalizada/"
+UBM_FILE_NAME = '../BaseDadosNormalizada/ubmMeanStDevFile.txt'
+GMM_UBM_DATA_FILE_NAME = '../BaseDadosNormalizada/ubmGMMData.p'
+GMM_UBM_FILE_NAME = '../BaseDadosNormalizada/ubmGMMmodel.p'
+
+covType='diag'
+nComponents = 512
+'''
+A separação em conjunto de treinamento, teste e validação será realizado depois 
+do calculo das caracteristicas
+
 AUDIO_TRAIN_PATH = '../BaseDadosAudios/Treinamento/'
 AUDIO_TESTI_PATH = '../BaseDadosAudios/Teste/'
 AUDIO_VALID_PATH = '../BaseDadosAudios/Validacao/'
@@ -25,6 +43,7 @@ AUDIO_VALID_PATH = '../BaseDadosAudios/Validacao/'
 FEATURES_TRAIN_PATH = '../BaseDadosFeatures/Treinamento/'
 FEATURES_TESTI_PATH = '../BaseDadosFeatures/Teste/'
 FEATURES_VALID_PATH = '../BaseDadosFeatures/Validacao/'
+'''
 # ------------------------------------------------------------------------------
 WIN_SIZE = 0.025
 STEP_SIZE = 0.01
@@ -37,7 +56,7 @@ PRE_ENPHASIS_COEF = 0.975
 # com base nas caracteriticas do audio e SAMPLE_RATE
 NUM_CEPS_COEFS = 13
 # --- MFCC
-MFCC_NUM_FILT = 13
+MFCC_NUM_FILTERS = 13
 # --- PLP and RASPA-PLP
 PLP_NUM_FILTERS = 17
 PLP_SUM_POWER = True
