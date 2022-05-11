@@ -37,16 +37,17 @@ def computeD(x,p=2):
 #            if ()
 #                n0 = j*(x[:,i+j] - x[:,i-j])
 #                n0.shape = (nDim,1)
+            d += j**2;
             if (np.sum(np.isfinite(x[:,i+j])==False) > 0) or \
                (np.sum(np.isfinite(x[:,i-j])==False) > 0):
                 continue
             n = np.add(n,j*(x[:,i+j] - x[:,i-j]))
-            d += j**2;
+            
         dMtx[:,i] = np.divide(n,(2*d))
     return dMtx    
 # =============================================================================
 class Feature:
-    def __init__(self,data=np.empty([]),computed=True):
+    def __init__(self,data=np.empty([]),computed=False, name=""):
         self.data = data
         self.computed = computed
         self.name = name
@@ -113,6 +114,12 @@ class AcousticsFeatures:
             print("Remove not finite {:} length {:}".format(n_NAN,len(idxFinite)))
             sel_feature = sel_feature[:,idxFinite]
         return sel_feature
+    # -------------------------------------------------------------------------
+    def get_feature_dim(self, feature_name):
+        if not (self.features[feature_name].computed):
+            return 0, 0
+        sel_feature = self.features[feature_name].data
+        return sel_feature.shape 
     # -------------------------------------------------------------------------
     def get_feature_time(self, feature_name, filter_vad=True):
         if not (self.features[feature_name].computed):
@@ -309,6 +316,7 @@ class AcousticsFeatures:
         # ======================================================================
         # -- - INICIO DO CALCULO POR FRAME ------------------------------------
         t_frame = 0
+        
         for time_idx in range(0,num_samples-n_win_length+1,n_step_length):
             win_audio_ori = audio_ori[time_idx:time_idx+n_win_length]
             win_audio = audio[time_idx:time_idx+n_win_length]

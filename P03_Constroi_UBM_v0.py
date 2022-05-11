@@ -64,27 +64,24 @@ if (not os.path.exists(c.UBM_FILE_NAME)) and (Compute_Train_UBM_Mean_Std):
         ofile = open(filename, "rb")
         featureObj = dill.load(ofile)
         ofile.close()
-        # --- Esqueci de calcular na rotina P01, melhor que economiza espaço
+        # --- Esqueci de calcular na rotina P01, melhor que economiza espaço --
         featureObj.apply_delta("mfcc",Force =True)
         # ---------------------------------------------------------------------
         features = featureObj.get_feature_by_name("mfcc")
         w_ubm.update(features.T)
-        
         print('Finalizado arquivo {:4} de {:4}'.format(idx, len(selFileList)-1));
     ubm_data = {}
     ubm_data["mean"]    = w_ubm.mean
     ubm_data["std"]     = w_ubm.std
-
     ofile = open(c.UBM_FILE_NAME, "wb")
     dill.dump(ubm_data, ofile)
     ofile.close()
-    
+
 elif(os.path.exists(c.UBM_FILE_NAME)):
     ofile = open(c.UBM_FILE_NAME, "rb")
     ubm_data = dill.load(ofile)
     ofile.close()
-    print("Arquivo \"{:}\" carregado.".format(c.UBM_FILE_NAME)) 
-    
+    print("Arquivo \"{:}\" carregado.".format(c.UBM_FILE_NAME))     
 
 if (Normalise_Other_Pools):
     print('Normalização das demais características de treinamento...')
@@ -95,7 +92,6 @@ if (Normalise_Other_Pools):
         if (pool.pool_name == 'UBM'):
             if not (os.path.exists(c.GMM_UBM_DATA_FILE_NAME)):
                 ubmData = np.empty(shape=[0, len(ubm_data["mean"])]).astype(np.float32)
-                
                 print("--- POOL: {:} ---------------------".format(pool.pool_name))
                 for idx, filename in enumerate(selFileList):
                     ofile = open(filename, "rb")
@@ -143,10 +139,10 @@ if (Normalise_Other_Pools):
             else:
                 print("Iniciando outro modelo UBM...")
         
-            for nPow in range(ubmIniPow,int(1+math.log2(c.nComponents))):
+            for nPow in range(ubmIniPow,int(1+math.log2(c.UBM_nComponents))):
                 nComp = 2 ** nPow
                 print('Iniciando com {} componentes'.format(nComp))
-                if (nComp > c.nComponents/2.1 ):
+                if (nComp > c.UBM_nComponents/2.1 ):
                     idxSel = np.random.permutation(nFrames)[0:int(nFrames/ds_factor)]
                     idxSel.sort()
                     regData = ubmData[idxSel,:].astype(np.float32)
@@ -154,12 +150,10 @@ if (Normalise_Other_Pools):
                     regData = ubmData.astype(np.float32)
                 
                 if (nComp == 1):
-                    UBM = GaussianMixture(n_components = nComp, covariance_type=c.covType, 
+                    UBM = GaussianMixture(n_components = nComp, covariance_type=c.UBM_covType, 
                                           reg_covar=1e-6,init_params='kmeans', n_init=1, 
                                           tol=1e-3, verbose = 2, max_iter=200).fit(regData)
                 else:
-                    # epsM = 0.25*UBM.precisions_
-                    
                     epsM = np.zeros(UBM.means_.shape).astype(np.float32)
                     idxMaxPrec = np.argmax(UBM.covariances_.max(0))
                     epsM[:,idxMaxPrec] = np.sqrt(np.max(UBM.covariances_.max(0)))*np.ones([1,UBM.precisions_.shape[0]]).astype(np.float32)
@@ -167,14 +161,7 @@ if (Normalise_Other_Pools):
                     wIni = wIni/np.sum(wIni)
                     mIni = np.append(UBM.means_.astype(np.float32) - epsM,UBM.means_.astype(np.float32) + epsM,axis=0)
                     pIni = np.append(UBM.precisions_.astype(np.float32),UBM.precisions_.astype(np.float32),axis=0)
-                    # UBM = BayesianGaussianMixture(n_components = nComp, covariance_type=c.covType, 
-                                          # # weight_concentration_prior= wIni,
-                                          # mean_prior=mIni,
-                                          # covariance_prior=pIni,
-                                          # reg_covar=1e-12, max_iter=200,
-                                          # tol=1e-9, verbose = 2).fit(regData)
-                    UBM = GaussianMixture(n_components = nComp, covariance_type=c.covType,
-                                          # warm_start=True,
+                    UBM = GaussianMixture(n_components = nComp, covariance_type=c.UBM_covType,
                                           weights_init= wIni,
                                           means_init=mIni,
                                           precisions_init=pIni,
@@ -208,11 +195,9 @@ if (Normalise_Other_Pools):
                 features = normalize_frames(features.T,\
                     np.array(ubm_data["mean"],np.float32),np.array(ubm_data["std"],np.float32))
                     
-                
                 if (currSpeakerID == lastSpeakerID):
                     nJoinFeatures = np.append(nJoinFeatures,features, axis=0)
                     nFiles += 1
-                    
                 else:
                     nJoinFeatures = features
                     nFiles = 1
@@ -231,9 +216,6 @@ if (Normalise_Other_Pools):
                         dill.dump(featureObj, ofile)
                         ofile.close()
                     nFiles = 0
-                    
-                    
-                    
                 print('Finalizado arquivo {:4} de {:4}'.format(idx, len(selFileList)-1));
                 # if (idx > 3):
                 #     sys.exit("MODO DEPURACAO: Fim do script")
@@ -245,6 +227,7 @@ if (Normalise_Other_Pools):
                 ofile = open(filename, "rb")
                 featureObj = dill.load(ofile)
                 ofile.close()
+                nDim, nFrame = featureObj.get_feature_dim("mfcc")
                 # --- Esqueci de calcular na rotina P01, melhor que economiza espaço
                 featureObj.apply_delta("mfcc",Force =True)
                 # ---------------------------------------------------------------------

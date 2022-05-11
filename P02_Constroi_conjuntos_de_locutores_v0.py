@@ -18,9 +18,9 @@ import dill
 class PoolSpeaker:
     def __init__(self, poll_name):
         self.pool_name = poll_name
-        self.pool_speakers = []
-        self.pool_time = []
-        self.pool_prop = []
+        self.pool_speakers = np.array([])
+        self.pool_time = np.array([])
+        self.pool_prop = np.array([])
         
 # -----------------------------------------------------------------------------
 class SetSpeakesInfo:
@@ -34,8 +34,8 @@ class SetSpeakesInfo:
         self.speaker_list = []
 # -----------------------------------------------------------------------------
 class DataBaseTimeInfo:
-    def __init__(self, init_speaker_list=[], init_speaker_time=[],\
-                 init_speaker_sets = []):
+    def __init__(self, init_speaker_list=np.array([]), init_speaker_time=np.array([]),\
+                 init_speaker_sets = np.array([])):
         self.speaker_list = init_speaker_list
         self.speaker_time = init_speaker_time 
         self.speaker_sets = init_speaker_sets
@@ -53,16 +53,16 @@ MAKE_SET_X_VECTOR_RESNET    = False
 SETS = ["LDA","UBM","TDDNN","RESNET","CALIBRATION","VALIDATION"]
 NUM_SETS                    = len(SETS)
 # -----------------------------------------------------------------------------
-NEW_RUN_ALL = False
+NEW_RUN_ALL = True
 # -----------------------------------------------------------------------------
 pattern = ('.p',)
 file_list = list_contend(c.FEATURE_FILE_OUTPUT,pattern)
 files_by_set = int(np.ceil(len(file_list)/NUM_SETS))
 if (not os.path.exists(c.DB_TIME_INFO_FILE)) or NEW_RUN_ALL:
     dbTimeInfo = DataBaseTimeInfo()  
-    speaker_list = []
-    speaker_time = []
-    speaker_db = []
+    speaker_list = np.array([])
+    speaker_time = np.array([])
+    speaker_db = np.array([])
     nFiles = len(file_list)
     for idx, file_feature in enumerate(file_list):
         print("File {:} de {:}".format(idx,nFiles))
@@ -74,18 +74,20 @@ if (not os.path.exists(c.DB_TIME_INFO_FILE)) or NEW_RUN_ALL:
         # with open(file_feature, 'rb') as f:
         #     features = pickle.load(f)
         timeF = features.get_feature_time("mfcc")
-        
         if (speaker_id in speaker_list):
-            idx = speaker_list.index(speaker_id)
+            idx = np.where(speaker_list==speaker_id)[0][0]
             speaker_time[idx] += timeF
         else:
-            speaker_list.append(speaker_id)
-            speaker_time.append(timeF)
-            speaker_db.append(speaker_id[:4])
-            
-    dbTimeInfo.speaker_list = speaker_list
-    dbTimeInfo.speaker_time = speaker_time
-    dbTimeInfo.speaker_sets = speaker_db
+            speaker_list = np.append(speaker_list,speaker_id)
+            speaker_time = np.append(speaker_time,timeF)
+            speaker_db = np.append(speaker_db,speaker_id[:4])
+    
+    
+    selTimeIdx = (speaker_time > c.DB_POOL_MIN_TIME).nonzero()[0]
+    
+    dbTimeInfo.speaker_list = speaker_list[selTimeIdx]
+    dbTimeInfo.speaker_time = speaker_time[selTimeIdx]
+    dbTimeInfo.speaker_sets = speaker_db[selTimeIdx]
     ofile = open(c.DB_TIME_INFO_FILE, "wb")
     dill.dump(dbTimeInfo, ofile)
     ofile.close()
@@ -94,31 +96,6 @@ else:
     dbTimeInfo = dill.load(ofile)
     ofile.close()
     print("Arquivo \"{:}\" carregado.".format(c.DB_TIME_INFO_FILE))
-
-# listSetSpeaker = np.unique(dbTimeInfo.speaker_sets)
-# binsAll = [0,20,40,80,160,200,280,320,400,np.Inf]
-# binsLDA = [0,30,60,90,120,240,300,np.Inf]
-
-# samplesByLimAll, _ = np.histogram(dbTimeInfo.speaker_time,bins=binsAll)
-# samplesByLimLDA3, _ = np.histogram(dbTimeInfo.speaker_time,bins=np.multiply(3,binsLDA))
-# samplesByLimLDA5, _ = np.histogram(dbTimeInfo.speaker_time,bins=np.multiply(5,binsLDA))
-# samplesByLimLDA7, _ = np.histogram(dbTimeInfo.speaker_time,bins=np.multiply(7,binsLDA))
-# listPercentile = []
-# for set_speaker in listSetSpeaker:
-#     idxSet = np.array([idSS == set_speaker for idSS in dbTimeInfo.speaker_sets]).nonzero()[0]
-#     setFeaturesSpeakes = SetSpeakesInfo(set_speaker)
-#     setFeaturesSpeakes.speaker_time = np.array(dbTimeInfo.speaker_time)[idxSet]
-#     setFeaturesSpeakes.speaker_list = np.array(dbTimeInfo.speaker_list)[idxSet]
-#     setFeaturesSpeakes.bins_all= binsAll
-#     setFeaturesSpeakes.binsLDA = binsLDA
-#     setFeaturesSpeakes.nLDA = [3,5,7]
-#     setFeaturesSpeakes.samplesByLimAll, _ = np.histogram(setFeaturesSpeakes.speaker_time,bins=binsAll)
-#     setFeaturesSpeakes.samplesByLimLDA3, _ = np.histogram(setFeaturesSpeakes.speaker_time,bins=np.multiply(3,binsLDA))
-#     setFeaturesSpeakes.samplesByLimLDA5, _ = np.histogram(setFeaturesSpeakes.speaker_time,bins=np.multiply(5,binsLDA))
-#     setFeaturesSpeakes.samplesByLimLDA7, _ = np.histogram(setFeaturesSpeakes.speaker_time,bins=np.multiply(7,binsLDA))
-#     setFeaturesSpeakes.percentile = np.percentile(setFeaturesSpeakes.speaker_time,\
-#                                                 [10,20,30,40,50,60,70,80,90])
-#     listPercentile.append(setFeaturesSpeakes)
 
 if (not os.path.exists(c.DB_TIME_SEPR_FILE)) or NEW_RUN_ALL:
     selectIndex = (np.array(dbTimeInfo.speaker_time) >= 10).nonzero()[0]

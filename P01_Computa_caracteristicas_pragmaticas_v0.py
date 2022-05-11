@@ -5,14 +5,12 @@ Created on Wed Jan 26 12:59:30 2022
 
 @author: adelino
 """
-# from IPython import get_ipython
-# get_ipython().run_line_magic('matplotlib', 'inline')
-
 import config as c
 import os
 from imports.files_utils import list_contend
 from imports.acoustic_features import AcousticsFeatures
 from imports.AudioData import AudioData
+import pickle
 from pathlib import Path
 import multiprocessing as mp
 import time
@@ -21,7 +19,7 @@ from multiprocessing import Value
 
 CONVERT_AUDIO_TO_PROCESS = True
 COMPUTE_FEATURES = True
-MULTI_CORES = False
+MULTI_CORES = True
 # -----------------------------------------------------------------------------
 def check_exist_feature_file(audio_file_name,audio_path,feture_file_list,feature_path):
     file_stem = Path(audio_file_name).stem
@@ -33,10 +31,7 @@ def check_exist_feature_file(audio_file_name,audio_path,feture_file_list,feature
         file_feature = ''
     return result, file_feature
 # -----------------------------------------------------------------------------
-def thread_compute_features(obj_features, osNiceVal,idx_comp, numFiles, computed):
-    # pid = os.getpid()
-    # os.system("sudo renice -n -5 -p " + str(pid))
-    
+def thread_compute_features(obj_features, osNiceVal,idx_comp, numFiles, computed): 
     obj_features.compute_features()
     obj_features.save_preps(c.AUDIO_FILE_INPUT,c.FEATURE_FILE_OUTPUT)
     obj_features.check_nan()
@@ -45,9 +40,6 @@ def thread_compute_features(obj_features, osNiceVal,idx_comp, numFiles, computed
     ofile.close()
     with computed.get_lock():
         computed.value += 1
-    
-    # with open(obj_features.get_feature_file(), 'wb') as f:
-    #     pickle.dump(obj_features,f)
     print('Finalizado arquivo {:4} de {:4} {:4}'.format(idx_comp, numFiles, computed.value))        
 # -----------------------------------------------------------------------------
 if (CONVERT_AUDIO_TO_PROCESS):
@@ -83,7 +75,6 @@ if (COMPUTE_FEATURES):
     print('Arquivos de de características encontrados: {}'.format(len(feature_file_list)))
     numFiles = len(file_list)-1
     
-    
     if (MULTI_CORES):
         idx = 0
         computed = Value('i', 0)
@@ -100,9 +91,6 @@ if (COMPUTE_FEATURES):
                     computed.value += 1
                 idx += 1
                 continue
-                # with open(feature_file_path, 'rb') as f:
-                #     features = pickle.load(f)
-                # print('\tCarregado arquivo {:4} de {:4}- {:}'.format(idx, len(file_list)-1,'-'.join(feature_file_path.split("/")[-2:])))
             else:
                 if (AudioData(audio_file_name).check(c.FILE_TYPE,c.CODEC,c.CHANNELS,c.SAMPLE_RATE)):
                     print('\tIniciado arquivo   {:4} de {:4}- {:}'.format(idx, len(file_list)-1,'-'.join(audio_file_name.split("/")[-2:])))
@@ -138,8 +126,6 @@ if (COMPUTE_FEATURES):
                 ofile = open(feature_file_path, "rb")
                 features = dill.load(ofile)
                 ofile.close()
-                # with open(feature_file_path, 'rb') as f:
-                #     features = pickle.load(f)
                 print('\tCarregado arquivo {:4} de {:4}'.format(idx, len(file_list)-1))
             else:
                 if (AudioData(audio_file_name).check(c.FILE_TYPE,c.CODEC,c.CHANNELS,c.SAMPLE_RATE)):
@@ -151,7 +137,5 @@ if (COMPUTE_FEATURES):
             ofile = open(features.get_feature_file(), "wb")
             dill.dump(features, ofile)
             ofile.close()
-            # with open(features.get_feature_file(), 'wb') as f:
-            #     pickle.dump(features,f)
             print('Finalizado arquivo {:4} de {:4}'.format(idx, len(file_list)-1));    
     print('Fim do calculo de características:')     

@@ -15,24 +15,232 @@ import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as transforms
 
-import time
-import os
+import torch.utils.data as data
+import pandas as pd
 import numpy as np
-# import pandas as pd
-from DB_wav_reader import read_feats_structure, find_save_models
-from SR_Dataset import read_MFB, TruncatedInputfromMFB, ToTensorInput, \
-    ToTensorDevInput, DvectorDataset, collate_fn_feat_padded, \
-    load_training_model, get_min_loss_model
-# from model.model import background_resnet
-import matplotlib.pyplot as plt
+
+from imports.files_utils import list_contend
+import os
+import time
+import dill
+import random
+
+# from DB_wav_reader import read_feats_structure, find_save_models
+# from SR_Dataset import read_MFB, TruncatedInputfromMFB, ToTensorInput, \
+#     ToTensorDevInput, DvectorDataset, collate_fn_feat_padded, \
+#     load_training_model, get_min_loss_model
+# # from model.model import background_resnet
+# import matplotlib.pyplot as plt
 import warnings
 from models.x_vector import X_vector
-            
-def load_dataset(val_ratio):
-    # Load training set and validation set
 
+# ----------------------------------------------------------------------------
+def collate_fn_feat_padded(batch):
+    """
+    Sort a data list by frame length (descending order)
+    batch : list of tuple (feature, label). len(batch) = batch_size
+        - feature : torch tensor of shape [1, 40, 80] ; variable size of frames
+        - labels : torch tensor of shape (1)
+    ex) samples = collate_fn([batch])
+        batch = [dataset[i] for i in batch_indices]. ex) [Dvector_train_dataset[i] for i in [0,1,2,3,4]]
+        batch[0][0].shape = torch.Size([1,64,774]). "774" is the number of frames per utterance. 
+        
+    """
+    batch.sort(key=lambda x: x[0].shape[2], reverse=True)
+    feats, labels = zip(*batch)
+    
+    # Merge labels => torch.Size([batch_size,1])
+    labels = torch.stack(labels, 0)
+    labels = labels.view(-1)
+    
+    # Merge frames
+    lengths = [feat.shape[2] for feat in feats] # in decreasing order 
+    max_length = lengths[0]
+    # features_mod.shape => torch.Size([batch_size, n_channel, dim, max(n_win)])
+    padded_features = torch.zeros(len(feats), feats[0].shape[0], feats[0].shape[1], feats[0].shape[2]).float() # convert to FloatTensor (it should be!). torch.Size([batch, 1, feat_dim, max(n_win)])
+    for i, feat in enumerate(feats):
+        end = lengths[i]
+        num_frames = feat.shape[2]
+        while max_length > num_frames:
+            feat = torch.cat((feat, feat[:,:,:end]), 2)
+            num_frames = feat.shape[2]
+        
+        padded_features[i, :, :, :] = feat[:,:,:max_length]
+    
+    return padded_features, labels
+# ----------------------------------------------------------------------------
+class ToTensorInput(object):
+    """Convert ndarrays in sample to Tensors."""
+    def __call__(self, np_feature):
+        """
+        Args:
+            feature (numpy.ndarray): feature to be converted to tensor.
+        Returns:
+            Tensor: Converted feature.
+        """
+        if isinstance(np_feature, np.ndarray):
+            # handle numpy array
+            ten_feature = torch.from_numpy(np_feature.transpose((0,2,1))).float() # output type => torch.FloatTensor, fast
+            
+            # input size : (1, n_win=200, dim=40)
+            # output size : (1, dim=40, n_win=200)
+            return ten_feature
+# ----------------------------------------------------------------------------
+class ToTensorDevInput(object):
+    """Convert ndarrays in sample to Tensors."""
+    def __call__(self, np_feature):
+        """
+        Args:
+            feature (numpy.ndarray): feature to be converted to tensor.
+        Returns:
+            Tensor: Converted feature.
+        """
+        if isinstance(np_feature, np.ndarray):
+            # handle numpy array
+            np_feature = np.expand_dims(np_feature, axis=0)
+            assert np_feature.ndim == 3, 'Data is not a 3D tensor. size:%s' %(np.shape(np_feature),)
+            ten_feature = torch.from_numpy(np_feature.transpose((0,2,1))).float() # output type => torch.FloatTensor, fast
+            # input size : (1, n_win=40, dim=40)
+            # output size : (1, dim=40, n_win=40)
+            return ten_feature
+# ----------------------------------------------------------------------------
+class TruncatedInputfromMFB(object):
+    """
+    input size : (n_frames, dim=40)
+    output size : (1, n_win=40, dim=40) => one context window is chosen randomly
+    """
+    def __init__(self, input_per_file=1):
+        super(TruncatedInputfromMFB, self).__init__()
+        self.input_per_file = input_per_file
+    
+    def __call__(self, frames_features):
+        network_inputs = []
+        # num_frames = len(frames_features)
+        num_frames = frames_features.shape[0]
+        win_size = c.TDDNN_NUM_WIN_SIZE
+        half_win_size = int(win_size/2)s
+        
+        if (num_frames < win_size):
+            print("TruncatedInputfromMFB error: num_frames < win_size")
+            T1 = tuple()
+            for i in range(0,np.ceil(win_size/num_frames)):
+                T1 += frames_features
+            frames_features = np.concatenate(T1)
+            
+        
+        #if num_frames - half_win_size < half_win_size:
+        while (num_frames - half_win_size) <= half_win_size:
+            frames_features = np.append(frames_features, frames_features[:num_frames,:], axis=0)
+            num_frames =  len(frames_features)
+            
+        for i in range(self.input_per_file):
+            j = random.randrange(half_win_size, num_frames - half_win_size)
+            if not j:
+                frames_slice = np.zeros(num_frames, c.FILTER_BANK, 'float64')
+                frames_slice[0:(frames_features.shape)[0]] = frames_features.shape
+            else:
+                frames_slice = frames_features[j - half_win_size:j + half_win_size]
+            network_inputs.append(frames_slice)
+        return np.array(network_inputs)
+# ----------------------------------------------------------------------------            
+def read_MFB(filename):
+    # with open(filename, 'rb') as f:
+    #     feat_and_label = pickle.load(f)
+    # print(filename)
+    # print(filename.split('/')[-2])
+    ofile = open(filename, "rb")
+    featureObj = dill.load(ofile)
+    ofile.close()
+    feature = featureObj.features["mfcc"].data.T
+    # feature = feat_and_label['feat'] # size : (n_frames, dim=40)
+    # label = feat_and_label['label']
+    label = filename.split('/')[-2]
+    # print(feature.shape)
+    # sys.exit("Depura")
+    if (feature.shape[0] <  c.TDDNN_NUM_WIN_SIZE):
+        print("read_MFB error: num_frames < win_size")
+        print("filename: {}".format(filename))
+        print("feature shape: {}, {}".format(feature.shape[0],feature.shape[1]))
+    """
+    VAD
+    """
+    # start_sec, end_sec = 0.5, 0.5
+    # start_frame = int(start_sec / 0.01)
+    # end_frame = len(feature) - int(end_sec / 0.01)
+    # ori_feat = feature
+    # feature = feature[start_frame:end_frame,:]
+    #assert len(feature) > 40, (
+    #            'length is too short. len:%s, ori_len:%s, file:%s' % (len(feature), len(ori_feat), filename))
+    return feature, label
+# ----------------------------------------------------------------------------            
+class DvectorDataset(data.Dataset):
+    def __init__(self, DB, loader, spk_to_idx, transform=None, *arg, **kw):
+        self.DB = DB
+        self.len = len(DB)
+        self.transform = transform
+        self.loader = loader
+        self.spk_to_idx = spk_to_idx
+        self.feature_dim = 0;
+    
+    def __getitem__(self, index):
+        feat_path = self.DB['filename'][index]
+        feature, label = self.loader(feat_path)
+        self.feature_dim = feature.shape[0]
+        label = self.spk_to_idx[label]
+        label = torch.Tensor([label]).long()
+        if self.transform:
+            feature = self.transform(feature)
+        
+        return feature, label
+    
+    def __len__(self):
+        return self.len
+# ----------------------------------------------------------------------------            
+def read_feats_structure(directory):
+    DB = pd.DataFrame()
+    DB['filename'] = list_contend(directory,('.p',)) #find_feats(directory) # filename
+    DB['filename'] = DB['filename'].apply(lambda x: x.replace('\\', '/')) # normalize windows paths
+    DB['speaker_id'] = DB['filename'].apply(lambda x: x.split('/')[-2]) # speaker folder name
+    DB['dataset_id'] = DB['filename'].apply(lambda x: x.split('/')[-2][4:]) # dataset folder name
+    DB['speaker_count'] = DB['speaker_id']  
+    # DB['speaker_id'] = DB['filename'].apply(lambda x: x.split('/')[-2]) # speaker folder name
+    # DB['dataset_id'] = DB['filename'].apply(lambda x: x.split('/')[-3]) # dataset folder name
+    # DB['speaker_count'] = DB['speaker_id']
+    numEmbeddings = {}
+    for idx, element in enumerate(DB['speaker_id']):
+        if element in numEmbeddings:
+            numEmbeddings[element] += 1
+            DB['speaker_count'][idx] = numEmbeddings[element]
+        else:
+            numEmbeddings[element] = 1
+            DB['speaker_count'][idx] = numEmbeddings[element]
+
+    # DB['dataset_id'] = DB['filename'].apply(lambda x: x.split('/')[-3]) # dataset folder name
+    num_speakers = len(DB['speaker_id'].unique())
+    # logging.info('Found {} files with {} different speakers.'.format(str(len(DB)).zfill(7), str(num_speakers).zfill(5)))
+    # logging.info(DB.head(10))
+    return DB, num_speakers
+# ----------------------------------------------------------------------------            
+def get_min_loss_model(log_dir):
+    start = 1 # Start epoch
+    save_model_file_list = list_contend(log_dir,('.pth',))
+    save_model_file_list.sort()
+    maxLoss = sys.float_info.max
+    if (len(save_model_file_list) > 0):
+        start = 1
+        for file in save_model_file_list:
+            values = re.split('_|/|.pth',file)
+            idx = int(values[-3])
+            loss = float(values[-2])
+            if (loss < maxLoss):
+                maxLoss = loss
+                start = idx
+    return start, maxLoss
+# ----------------------------------------------------------------------------            
+def load_dataset(dbFolder, val_ratio):
+    # Load training set and validation set
     # Split training set into training set and validation set according to "val_ratio"
-    train_DB, valid_DB = split_train_dev(c.TRAIN_FEAT_DIR, val_ratio) 
+    train_DB, valid_DB = split_train_dev(dbFolder, val_ratio) 
     file_loader = read_MFB # numpy array:(n_frames, n_dims)     
     transform = transforms.Compose([
         TruncatedInputfromMFB(), # numpy array:(1, n_frames, n_dims)
@@ -50,9 +258,9 @@ def load_dataset(val_ratio):
     
     n_classes = len(speaker_list) # How many speakers? 240
     return train_dataset, valid_dataset, n_classes
-
+# ----------------------------------------------------------------------------
 def split_train_dev(train_feat_dir, valid_ratio):
-    train_valid_DB = read_feats_structure(train_feat_dir)
+    train_valid_DB, num_speakers = read_feats_structure(train_feat_dir)
     total_len = len(train_valid_DB) # 148642
     valid_len = int(total_len * valid_ratio/100.)
     train_len = total_len - valid_len
@@ -77,7 +285,7 @@ def split_train_dev(train_feat_dir, valid_ratio):
     print('Total %d utts' %(total_len))
     
     return train_DB, valid_DB
-
+# ----------------------------------------------------------------------------
 def train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes):
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -109,7 +317,7 @@ def train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
         losses.update(loss.item(), inputs.size(0))
         
         # compute gradient and do SGD step
-        optimizer.zero_grad(set_to_none=True)
+        optimizer.zero_grad()
         loss.backward()
         # The epoch parameter in `scheduler.step()` was not necessary and is being deprecated where possible. Please use `scheduler.step()` to step the scheduler. During the deprecation, if epoch is different from None, the closed form is used instead of the new chainable form, where available. Please open an issue if you are unable to replicate your use case: https://github.com/pytorch/pytorch/issues/new/choose.
         optimizer.step()
@@ -128,7 +336,7 @@ def train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
                      100. * batch_idx / len(train_loader), 
                      batch_time=batch_time, loss=losses, train_acc=train_acc))
     return losses.avg
-                     
+# ----------------------------------------------------------------------------                     
 def validate(val_loader, model, criterion, use_cuda, epoch):
     batch_time = AverageMeter()
     losses = AverageMeter()
@@ -170,7 +378,7 @@ def validate(val_loader, model, criterion, use_cuda, epoch):
                   loss=losses, val_acc=val_acc))
     
     return losses.avg
-
+# ----------------------------------------------------------------------------
 class AverageMeter(object):
     """Computes and stores the average and current value"""
     def __init__(self):
@@ -185,7 +393,7 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-
+# ----------------------------------------------------------------------------
 def create_optimizer(optimizer, model, new_lr, wd):
     # setup optimizer
     if optimizer == 'sgd':
@@ -212,6 +420,7 @@ def create_optimizer(optimizer, model, new_lr, wd):
                                   weight_decay=wd)
     return optimizer
 
+# ----------------------------------------------------------------------------
 def visualize_the_losses(train_loss, valid_loss):
     # https://github.com/Bjarten/early-stopping-pytorch/blob/master/MNIST_Early_Stopping_example.ipynb
     # visualize the loss as the network trained
@@ -236,32 +445,20 @@ def visualize_the_losses(train_loss, valid_loss):
 # ------------------------------------------------------------------------------
 with warnings.catch_warnings():
     warnings.simplefilter('ignore')
-    # Verifica a etapa de treinamento
-    log_dir = c.SAVE_MODELS_DIR # where to save checkpoints
-    use_cuda = False # use gpu or cpu
-    val_ratio = 15 # Percentage of validation set
-    embedding_size = 512
-    # --- dimensao 129 ---------------------------------------------------------
-    featureDim = 3*129
     
-    start, maxLoss = get_min_loss_model(log_dir)
+    # Verifica a etapa de treinamento
+    log_dir = c.TDDNN_SAVE_MODELS_DIR # where to save checkpoints
+    # embedding_size = 512
+    # --- dimensao 129 ---------------------------------------------------------
+    featureDim = 3*c.NUM_CEPS_COEFS
+    startEP, maxLoss = get_min_loss_model(log_dir)
     # Set hyperparameters
     # use_cuda = True # use gpu or cpu
+    endEP = c.TDDNN_N_EPOCHS - startEP # Last epoch
     
-    n_epochs = 750 # How many epochs?
-    end = start + n_epochs # Last epoch
-    
-    lr = 1e-1 # Initial learning rate
-    wd = 1e-4 # Weight decay (L2 penalty)
-    optimizer_type = 'sgd' # ex) sgd, adam, adagrad
-    
-    batch_size = 32 # Batch size for training # original 64
-    valid_batch_size = 8 # Batch size for validation
-    use_shuffle = True # Shuffle for training or not
-    
+    use_cuda = torch.cuda.is_available()
     # Load dataset
-    train_dataset, valid_dataset, n_classes = load_dataset(val_ratio)
-    
+    train_dataset, valid_dataset, n_classes = load_dataset(c.TDDNN_TRAIN_PATH,c.TDDNN_TRAIN_TEST_RATIO)
     
     # print the experiment configuration
     print('\nNumber of classes (speakers):\n{}\n'.format(n_classes))
@@ -270,14 +467,14 @@ with warnings.catch_warnings():
         os.makedirs(log_dir)
     
     criterion = nn.CrossEntropyLoss()
-    use_cuda = torch.cuda.is_available()
+    
     device = torch.device("cuda" if use_cuda else "cpu")
     # instantiate model and initialize weights
-    if (start == 1):
+    if (startEP == 1):
         # model = background_resnet(embedding_size=embedding_size, \
         #                       num_classes=n_classes, backbone=c.BACKBONETYPE)
         model = X_vector(featureDim, n_classes)
-        optimizer = create_optimizer(optimizer_type, model, lr, wd)
+        optimizer = create_optimizer(c.TDDNN_OPT_TYPE, model, c.TDDNN_LR, c.TDDNN_WD)
     else:
         model, optimizer, start = load_training_model(use_cuda, log_dir, start, featureDim, \
                                     n_classes)
@@ -285,14 +482,15 @@ with warnings.catch_warnings():
         model.cuda()    
     
     
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, max_lr=1, base_lr=1e-4, verbose=1)        
+    # scheduler = optim.lr_scheduler.CyclicLR(optimizer, max_lr=1, base_lr=1e-4, verbose=1)
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, max_lr=1, base_lr=1e-4)
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset,
-                                                       batch_size=batch_size,
-                                                       shuffle=use_shuffle,
+                                                       batch_size=c.TDDNN_BATCH_SIZE,
+                                                       shuffle=c.TDDNN_USE_SHUFFLE,
                                                        pin_memory=True,
                                                        num_workers = 1)
     valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,
-                                                       batch_size=valid_batch_size,
+                                                       batch_size=c.TDDNN_VALID_BATCH,
                                                        shuffle=False,
                                                        pin_memory=True,
                                                        num_workers = 1,
@@ -303,7 +501,7 @@ with warnings.catch_warnings():
     # to track the average validation loss per epoch as the model trains
     avg_valid_losses = []
     
-    for epoch in range(start, end):
+    for epoch in range(startEP, endEP):
     
         # train for one epoch
         train_loss = train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
