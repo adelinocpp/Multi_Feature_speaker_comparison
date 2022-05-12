@@ -25,12 +25,13 @@ def normalize_frames(m,ubm_mean,ubm_std):
 # ----------------------------------------------------------------------------
 
 Compute_Train_UBM_Mean_Std = True
-Compute_GMM_UBM_Train = True
+Only_Compute_GMM_UBM_Train = True
 Normalise_Other_Pools = True
 if (not os.path.exists(c.DB_TIME_SEPR_FILE)):
     print("Arquivo {:} não existe. Executar a rotina P02.".format(c.DB_TIME_SEPR_FILE))
     Compute_GMM_UBM_Train = False
     Compute_Train_UBM_Mean_Std = False
+    sys.exit("Erro ao carregar arquivo.")
 else:
     ofile = open(c.DB_TIME_SEPR_FILE, "rb")
     listPool = dill.load(ofile)
@@ -90,8 +91,9 @@ if (Normalise_Other_Pools):
         poolIndex = np.array([filename.split("/")[3] in indexList for filename in file_list]).nonzero()[0]
         selFileList = np.array(file_list)[poolIndex]
         if (pool.pool_name == 'UBM'):
+
             if not (os.path.exists(c.GMM_UBM_DATA_FILE_NAME)):
-                ubmData = np.empty(shape=[0, len(ubm_data["mean"])]).astype(np.float32)
+                ubmData = np.empty(shape=[0, len(ubm_data["mean"])]).astype(np.float64)
                 print("--- POOL: {:} ---------------------".format(pool.pool_name))
                 for idx, filename in enumerate(selFileList):
                     ofile = open(filename, "rb")
@@ -100,10 +102,10 @@ if (Normalise_Other_Pools):
                     # --- Esqueci de calcular na rotina P01, melhor que economiza espaço
                     featureObj.apply_delta("mfcc",Force =True)
                     # ---------------------------------------------------------------------
-                    features = featureObj.get_feature_by_name("mfcc").astype(np.float32)
+                    features = featureObj.get_feature_by_name("mfcc").astype(np.float64)
                     features = normalize_frames(features.T,\
-                        ubm_data["mean"].astype(np.float32),ubm_data["std"].astype(np.float32))
-                    features = features.astype(np.float32)
+                        ubm_data["mean"].astype(np.float64),ubm_data["std"].astype(np.float64))
+                    features = features.astype(np.float64)
                     ubmData = np.append(ubmData,  features, axis=0)
                     print('Carregado arquivo {:4} de {:4}'.format(idx, len(selFileList)-1));
 
@@ -114,7 +116,7 @@ if (Normalise_Other_Pools):
                 ofile = open(c.GMM_UBM_DATA_FILE_NAME, "rb")
                 ubmData = dill.load(ofile)
                 ofile.close()
-                ubmData = ubmData.astype(np.float32)
+                ubmData = ubmData.astype(np.float64)
                 print('Carregado arquivo {:4}.'.format(c.GMM_UBM_DATA_FILE_NAME))
 
             print("Treinando UBM! ubmData {:} x {:}".format(ubmData.shape[0], ubmData.shape[1]))
@@ -124,7 +126,7 @@ if (Normalise_Other_Pools):
                 idxFinite = (np.sum(infiniteMtx,axis=1) == 0).nonzero()[0]
                 print("idx finite {:}".format(idxFinite.shape))
                 print("Remove UBM not finite {:} length {:}".format(n_NAN,len(idxFinite)))
-                ubmData = ubmData[:,idxFinite].astype(np.float32)
+                ubmData = ubmData[:,idxFinite].astype(np.float64)
 
             nFrames = ubmData.shape[0]
             ds_factor = 8
@@ -145,22 +147,22 @@ if (Normalise_Other_Pools):
                 if (nComp > c.UBM_nComponents/2.1 ):
                     idxSel = np.random.permutation(nFrames)[0:int(nFrames/ds_factor)]
                     idxSel.sort()
-                    regData = ubmData[idxSel,:].astype(np.float32)
+                    regData = ubmData[idxSel,:].astype(np.float64)
                 else:
-                    regData = ubmData.astype(np.float32)
+                    regData = ubmData.astype(np.float64)
                 
                 if (nComp == 1):
                     UBM = GaussianMixture(n_components = nComp, covariance_type=c.UBM_covType, 
                                           reg_covar=1e-6,init_params='kmeans', n_init=1, 
                                           tol=1e-3, verbose = 2, max_iter=200).fit(regData)
                 else:
-                    epsM = np.zeros(UBM.means_.shape).astype(np.float32)
+                    epsM = np.zeros(UBM.means_.shape).astype(np.float64)
                     idxMaxPrec = np.argmax(UBM.covariances_.max(0))
-                    epsM[:,idxMaxPrec] = np.sqrt(np.max(UBM.covariances_.max(0)))*np.ones([1,UBM.precisions_.shape[0]]).astype(np.float32)
-                    wIni = 0.5*np.append(UBM.weights_,UBM.weights_,axis=0).astype(np.float32)
+                    epsM[:,idxMaxPrec] = np.sqrt(np.max(UBM.covariances_.max(0)))*np.ones([1,UBM.precisions_.shape[0]]).astype(np.float64)
+                    wIni = 0.5*np.append(UBM.weights_,UBM.weights_,axis=0).astype(np.float64)
                     wIni = wIni/np.sum(wIni)
-                    mIni = np.append(UBM.means_.astype(np.float32) - epsM,UBM.means_.astype(np.float32) + epsM,axis=0)
-                    pIni = np.append(UBM.precisions_.astype(np.float32),UBM.precisions_.astype(np.float32),axis=0)
+                    mIni = np.append(UBM.means_.astype(np.float64) - epsM,UBM.means_.astype(np.float64) + epsM,axis=0)
+                    pIni = np.append(UBM.precisions_.astype(np.float64),UBM.precisions_.astype(np.float64),axis=0)
                     UBM = GaussianMixture(n_components = nComp, covariance_type=c.UBM_covType,
                                           weights_init= wIni,
                                           means_init=mIni,
@@ -172,11 +174,10 @@ if (Normalise_Other_Pools):
                 dill.dump(UBM, ofile)
                 ofile.close()
     
-        if (pool.pool_name == 'LDA'):
+        if (pool.pool_name == 'LDA') and (not Only_Compute_GMM_UBM_Train):
             print("LDA")
             lastSpeakerID = '0'
             nFiles = 0;
-            
             for idx, filename in enumerate(selFileList):
                 if (idx < pool.pool_prop[0]):
                     nDiv = 3
@@ -191,17 +192,17 @@ if (Normalise_Other_Pools):
                 # --- Esqueci de calcular na rotina P01, melhor que economiza espaço
                 featureObj.apply_delta("mfcc",Force =True)
                 # ---------------------------------------------------------------------
-                features = featureObj.get_feature_by_name("mfcc").astype(np.float32)
+                features = featureObj.get_feature_by_name("mfcc").astype(np.float64)
                 features = normalize_frames(features.T,\
-                    np.array(ubm_data["mean"],np.float32),np.array(ubm_data["std"],np.float32))
+                    np.array(ubm_data["mean"],np.float64),np.array(ubm_data["std"],np.float64))
                     
-                if (currSpeakerID == lastSpeakerID):
-                    nJoinFeatures = np.append(nJoinFeatures,features, axis=0)
-                    nFiles += 1
-                else:
+                if not (currSpeakerID == lastSpeakerID):
                     nJoinFeatures = features
                     nFiles = 1
                     lastSpeakerID = currSpeakerID
+                else:
+                    nJoinFeatures = np.append(nJoinFeatures,features, axis=0)
+                    nFiles += 1
                     
                 if (nFiles == 2):
                     nFrames = nJoinFeatures.shape[0]
@@ -221,29 +222,55 @@ if (Normalise_Other_Pools):
                 #     sys.exit("MODO DEPURACAO: Fim do script")
             
             #     print('Finalizado arquivo {:4} de {:4}'.format(idx, len(selFileList)-1));
-        else:
+        elif (not Only_Compute_GMM_UBM_Train):
             print("--- POOL: {:} ---------------------".format(pool.pool_name))
+            lastSpeakerID = '0'
+            nFiles = 0;
             for idx, filename in enumerate(selFileList):
+                nDiv = 2
+                currSpeakerID = filename.split("/")[-2]
                 ofile = open(filename, "rb")
                 featureObj = dill.load(ofile)
                 ofile.close()
-                nDim, nFrame = featureObj.get_feature_dim("mfcc")
                 # --- Esqueci de calcular na rotina P01, melhor que economiza espaço
                 featureObj.apply_delta("mfcc",Force =True)
                 # ---------------------------------------------------------------------
-                features = featureObj.get_feature_by_name("mfcc").astype(np.float32)
+                features = featureObj.get_feature_by_name("mfcc").astype(np.float64)
                 features = normalize_frames(features.T,\
-                    np.array(ubm_data["mean"],np.float32),np.array(ubm_data["std"],np.float32))
+                    np.array(ubm_data["mean"],np.float64),np.array(ubm_data["std"],np.float64))
                     
-                norm_feature_obj = Feature(data=features.T,computed=True,name="mfcc")
-
-                featureObj.features["mfcc"] = norm_feature_obj
+                if not (currSpeakerID == lastSpeakerID):
+                    nJoinFeatures = features
+                    nFiles = 1
+                    lastSpeakerID = currSpeakerID
+                else:
+                    nJoinFeatures = np.append(nJoinFeatures,features, axis=0)
+                    nFiles += 1
                 
-                featureObj.feature_file = "{:}{:}/{:}".format(c.DB_POOL_EXPERIMENT,pool.pool_name,"/".join(filename.split("/")[3:]))
-                build_folders_to_save(featureObj.feature_file )
-                ofile = open(featureObj.get_feature_file(), "wb")
-                dill.dump(featureObj, ofile)
-                ofile.close()
+                if (nFiles == 2):
+                    nFrames = nJoinFeatures.shape[0]
+                    for iDiv in range(0, nDiv):
+                        idxIni = int(np.ceil(iDiv/nDiv*nFrames))
+                        idxFim = np.min([idxIni + int(np.ceil(nFrames/nDiv)), nFrames])
+                        norm_feature_obj = Feature(data=nJoinFeatures[idxIni:idxFim,:].T,computed=True,name="mfcc")
+                        featureObj.features["mfcc"] = norm_feature_obj
+                        featureObj.feature_file = "{:}{:}/{:}/{:}_{:02}.p".format(c.DB_POOL_EXPERIMENT,\
+                                                pool.pool_name,filename.split("/")[3],pool.pool_name,iDiv)
+                        build_folders_to_save(featureObj.feature_file )
+                        ofile = open(featureObj.get_feature_file(), "wb")
+                        dill.dump(featureObj, ofile)
+                        ofile.close()
+                    nFiles = 0
+                    
+                # norm_feature_obj = Feature(data=features.T,computed=True,name="mfcc")
+
+                # featureObj.features["mfcc"] = norm_feature_obj
+                
+                # featureObj.feature_file = "{:}{:}/{:}".format(c.DB_POOL_EXPERIMENT,pool.pool_name,"/".join(filename.split("/")[3:]))
+                # build_folders_to_save(featureObj.feature_file )
+                # ofile = open(featureObj.get_feature_file(), "wb")
+                # dill.dump(featureObj, ofile)
+                # ofile.close()
                 
                 print('Finalizado arquivo {:4} de {:4}'.format(idx, len(selFileList)-1));
             #     sys.exit("MODO DEPURACAO: Fim do script")

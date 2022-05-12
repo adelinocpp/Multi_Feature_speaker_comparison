@@ -5,10 +5,11 @@ Created on Mon May  9 10:47:36 2022
 
 @author: adelino
 """
-DEPURACAO = True
+DEPURACAO = False
 if (DEPURACAO):
     import sys
-    
+
+import sys
 import config as c
 import torch
 import torch.nn as nn
@@ -24,7 +25,8 @@ import os
 import time
 import dill
 import random
-
+import re
+from glob import glob
 # from DB_wav_reader import read_feats_structure, find_save_models
 # from SR_Dataset import read_MFB, TruncatedInputfromMFB, ToTensorInput, \
 #     ToTensorDevInput, DvectorDataset, collate_fn_feat_padded, \
@@ -34,6 +36,28 @@ import random
 import warnings
 from models.x_vector import X_vector
 
+# ----------------------------------------------------------------------------
+def load_training_model(use_cuda, log_dir, cp_num, embedding_size, n_classes):
+    # model = background_resnet(embedding_size=embedding_size, \
+    #                           num_classes=n_classes,backbone=TypeBackBone)
+    model =  X_vector(embedding_size, n_classes)
+    optimizer =  optim.SGD(model.parameters(), lr=1E-1, momentum=0.9, \
+                           dampening=0, weight_decay=1E-4)
+    # model = TheModelClass(*args, **kwargs)
+    if use_cuda:
+        model.cuda()
+    print('=> loading checkpoint')
+    # original saved file with DataParallel
+    fnePathern = 'checkpoint_{:06}_*'.format(cp_num)
+    file = glob(os.path.join(log_dir, fnePathern))
+    checkpoint = torch.load(file[0])
+    # create new OrderedDict that does not contain `module.`
+    
+    epoch = checkpoint['epoch']
+    optimizer.load_state_dict(checkpoint['optimizer']);
+    model.load_state_dict(checkpoint['state_dict'])
+    
+    return model, optimizer, epoch
 # ----------------------------------------------------------------------------
 def collate_fn_feat_padded(batch):
     """
@@ -118,7 +142,7 @@ class TruncatedInputfromMFB(object):
         # num_frames = len(frames_features)
         num_frames = frames_features.shape[0]
         win_size = c.TDDNN_NUM_WIN_SIZE
-        half_win_size = int(win_size/2)s
+        half_win_size = int(win_size/2)
         
         if (num_frames < win_size):
             print("TruncatedInputfromMFB error: num_frames < win_size")
@@ -476,7 +500,7 @@ with warnings.catch_warnings():
         model = X_vector(featureDim, n_classes)
         optimizer = create_optimizer(c.TDDNN_OPT_TYPE, model, c.TDDNN_LR, c.TDDNN_WD)
     else:
-        model, optimizer, start = load_training_model(use_cuda, log_dir, start, featureDim, \
+        model, optimizer, startEP = load_training_model(use_cuda, log_dir, startEP, featureDim, \
                                     n_classes)
     if use_cuda:
         model.cuda()    
