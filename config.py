@@ -57,12 +57,24 @@ TDDNN_TRAIN_TEST_RATIO = 15
 TDDNN_N_EPOCHS = 750
 TDDNN_LR = 1e-1 # Initial learning rate
 TDDNN_WD = 1e-4 # Weight decay (L2 penalty)
-TDDNN_OPT_TYPE = 'sgd' # ex) sgd, adam, adagrad
-TDDNN_BATCH_SIZE = 32 # Batch size for training # original 64
+TDDNN_OPT_TYPE = 'adam' # ex) sgd, adam, adagrad
+TDDNN_BATCH_SIZE = 64 # Batch size for training # original 64
 TDDNN_VALID_BATCH = 8 # Batch size for validation
 TDDNN_USE_SHUFFLE = True
-SAVE_MODELS_DIR = 'model_saved'
 
+RESNET_SAVE_MODELS_DIR = "../BaseDNNTrained/RESNET/"
+RESNET_SAVE_MODELS_FILE_BASE = "model_resnet"
+RESNET_TRAIN_PATH = '../BaseDadosNormalizada/RESNET/'
+RESNET_NUM_WIN_SIZE = 200 
+RESNET_TRAIN_TEST_RATIO = 15
+RESNET_N_EPOCHS = 750
+RESNET_LR = 1e-1 # Initial learning rate
+RESNET_WD = 1e-4 # Weight decay (L2 penalty)
+RESNET_OPT_TYPE = 'adagrad' # ex) sgd, adam, adagrad
+RESNET_BATCH_SIZE = 64 # Batch size for training # original 64
+RESNET_VALID_BATCH = 8 # Batch size for validation
+RESNET_USE_SHUFFLE = True
+RESNET_BACKBONETYPE = 'resnet152'
 # ------------------------------------------------------------------------------
 # ==============================================================================
 # Dados para calculo das características

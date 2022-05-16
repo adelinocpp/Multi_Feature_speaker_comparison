@@ -175,7 +175,7 @@ def read_MFB(filename):
     ofile = open(filename, "rb")
     featureObj = dill.load(ofile)
     ofile.close()
-    feature = featureObj.features["mfcc"].data.T
+    feature = featureObj.features["mfcc"].data.T.astype(np.float32)
     # feature = feat_and_label['feat'] # size : (n_frames, dim=40)
     # label = feat_and_label['label']
     label = filename.split('/')[-2]
@@ -367,12 +367,13 @@ def validate(val_loader, model, criterion, use_cuda, epoch):
     val_acc = AverageMeter()
     
     n_correct, n_total = 0, 0
-    
+    log_interval = 4
     # switch to evaluate mode
     model.eval()
 
+    print('Init Validade...')
     with torch.no_grad():
-        end = time.time()
+        # end = time.time()
         for i, (data) in enumerate(val_loader):
             inputs, targets = data
             current_sample = inputs.size(0)  # batch size
@@ -393,9 +394,12 @@ def validate(val_loader, model, criterion, use_cuda, epoch):
             loss = criterion(output, targets)
             losses.update(loss.item(), inputs.size(0))
             # measure elapsed time
-            batch_time.update(time.time() - end)
-            end = time.time()
-        
+            # batch_time.update(time.time() - end)
+            # end = time.time()
+            if i % log_interval == 0:
+                print(
+                        'Valid run: {:3d}/{:3d}\t'.format(
+                         i, len(val_loader)))
         print('  * Validation: '
                   'Loss {loss.avg:.4f}\t'
                   'Acc {val_acc.avg:.4f}'.format(
@@ -464,7 +468,7 @@ def visualize_the_losses(train_loss, valid_loss):
     plt.legend()
     plt.tight_layout()
     #plt.show()
-    fig.savefig('loss_plot.png', bbox_inches='tight')
+    fig.savefig('{:}loss_plot_tddnn.png'.format(c.TDDNN_SAVE_MODELS_DIR), bbox_inches='tight')
 
 # ------------------------------------------------------------------------------
 with warnings.catch_warnings():
@@ -537,7 +541,6 @@ with warnings.catch_warnings():
         scheduler.step()
         
         # calculate average loss over an epoch
-        avg_train_losses.append(train_loss)
         avg_valid_losses.append(valid_loss)
         # do checkpointing
         if (valid_loss < maxLoss):
@@ -546,8 +549,6 @@ with warnings.catch_warnings():
             torch.save({'epoch': epoch + 1, 'state_dict': model.state_dict(),
                         'optimizer': optimizer.state_dict()},
                        '{}/checkpoint_{:06}_{:08.5f}.pth'.format(log_dir, epoch, valid_loss))
-        if (DEPURACAO):
-            sys.exit("MODO DEPURACAO: Fim do script")
             
     # find position of lowest validation loss
     minposs = avg_valid_losses.index(min(avg_valid_losses))+1 
@@ -555,3 +556,7 @@ with warnings.catch_warnings():
     
     # visualize the loss and learning rate as the network trained
     visualize_the_losses(avg_train_losses, avg_valid_losses)
+    allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
+    ofile = open('{:}loss_tddnn.txt'.format(c.TDDNN_SAVE_MODELS_DIR), "wb")
+    dill.dump(ubm_data, ofile)
+    ofile.close()

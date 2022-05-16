@@ -24,8 +24,8 @@ def normalize_frames(m,ubm_mean,ubm_std):
     return (m - ubm_mean) / (ubm_std + 2e-12)
 # ----------------------------------------------------------------------------
 
-Compute_Train_UBM_Mean_Std = True
-Only_Compute_GMM_UBM_Train = True
+Compute_Train_UBM_Mean_Std = False
+Only_Compute_GMM_UBM_Train = False
 Normalise_Other_Pools = True
 if (not os.path.exists(c.DB_TIME_SEPR_FILE)):
     print("Arquivo {:} não existe. Executar a rotina P02.".format(c.DB_TIME_SEPR_FILE))
