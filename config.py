@@ -27,7 +27,7 @@ FEATURE_FILE_LIST = '../BaseDadosFeatures/dbFeatureFileList.txt'
 FEATURE_FILE_OUTPUT = '../BaseDadosFeatures/'
 DB_TIME_INFO_FILE = '../BaseDadosFeatures/dbFeatureVadTimeInfo.txt'
 DB_TIME_SEPR_FILE = '../BaseDadosFeatures/dbTrainingGroups.txt'
-# ------------------------------------------------------------------------------
+# ==============================================================================
 '''
 A separação em conjunto de treinamento, teste e validação será realizado depois 
 do calculo das caracteristicas
@@ -40,15 +40,16 @@ FEATURES_TRAIN_PATH = '../BaseDadosFeatures/Treinamento/'
 FEATURES_TESTI_PATH = '../BaseDadosFeatures/Teste/'
 FEATURES_VALID_PATH = '../BaseDadosFeatures/Validacao/'
 '''
+# ==============================================================================
 DB_POOL_EXPERIMENT = "../BaseDadosNormalizada/"
 DB_POOL_MIN_TIME = 20
-# ------------------------------------------------------------------------------
+# ==============================================================================
 UBM_FILE_NAME = '../BaseDadosNormalizada/ubmMeanStDevFile.txt'
 GMM_UBM_DATA_FILE_NAME = '../BaseDadosNormalizada/ubmGMMData.p'
 GMM_UBM_FILE_NAME = '../BaseDadosNormalizada/ubmGMMmodel.p'
 UBM_covType='diag'
 UBM_nComponents = 512
-# ------------------------------------------------------------------------------
+# ==============================================================================
 TDDNN_SAVE_MODELS_DIR = "../BaseDNNTrained/TDDNN/"
 TDDNN_SAVE_MODELS_FILE_BASE = "model_tddnn"
 TDDNN_TRAIN_PATH = '../BaseDadosNormalizada/TDDNN/'
@@ -61,7 +62,10 @@ TDDNN_OPT_TYPE = 'adam' # ex) sgd, adam, adagrad
 TDDNN_BATCH_SIZE = 64 # Batch size for training # original 64
 TDDNN_VALID_BATCH = 8 # Batch size for validation
 TDDNN_USE_SHUFFLE = True
-
+TDDNN_TRAIN_DATA_FILE = 'tddnn_train_data'
+# ==============================================================================
+ALPHA_LNORM = 10
+# ==============================================================================
 RESNET_SAVE_MODELS_DIR = "../BaseDNNTrained/RESNET/"
 RESNET_SAVE_MODELS_FILE_BASE = "model_resnet"
 RESNET_TRAIN_PATH = '../BaseDadosNormalizada/RESNET/'
@@ -70,12 +74,41 @@ RESNET_TRAIN_TEST_RATIO = 15
 RESNET_N_EPOCHS = 750
 RESNET_LR = 1e-1 # Initial learning rate
 RESNET_WD = 1e-4 # Weight decay (L2 penalty)
-RESNET_OPT_TYPE = 'adagrad' # ex) sgd, adam, adagrad
+RESNET_OPT_TYPE = 'adam' # ex) sgd, adam, adagrad
 RESNET_BATCH_SIZE = 64 # Batch size for training # original 64
 RESNET_VALID_BATCH = 8 # Batch size for validation
 RESNET_USE_SHUFFLE = True
 RESNET_BACKBONETYPE = 'resnet152'
-# ------------------------------------------------------------------------------
+RESNET_TRAIN_DATA_FILE = 'resnet_train_data.txt'
+# ==============================================================================
+CALIBRATION_DIR = '../BaseDadosNormalizada/CALIBRATION/'
+VALIDATION_DIR = '../BaseDadosNormalizada/VALIDATION/'
+LDA_DIR = '../BaseDadosNormalizada/LDA/'
+UBM_DIR = '../BaseDadosNormalizada/UBM/'
+# ==============================================================================
+GMM_MODEL_CALIBRATION_DIR = '../BaseModels/GMM_CALIBRATION/'
+GMM_MODEL_VALIDATION_DIR = '../BaseModels/GMM_VALIDATION/'
+GMM_MODEL_UBM_DIR = '../BaseModels/GMM_UBM/'
+
+IVECTOR_MODEL_CALIBRATION_DIR = '../BaseModels/IVECTOR_CALIBRATION/'
+IVECTOR_MODEL_VALIDATION_DIR = '../BaseModels/IVECTOR_VALIDATION/'
+IVECTOR_MODEL_LDA_DIR = '../BaseModels/IVECTOR_LDA/'
+IVECTOR_MODEL_UBM_DIR = '../BaseModels/IVECTOR_UBM/'
+
+XVECTOR_TDDNN_MODEL_CALIBRATION_DIR = '../BaseModels/XVECTOR_CALIBRATION/TDDNN/'
+XVECTOR_TDDNN_MODEL_VALIDATION_DIR = '../BaseModels/XVECTOR_VALIDATION/TDDNN/'
+XVECTOR_TDDNN_MODEL_LDA_DIR = '../BaseModels/XVECTOR_LDA/TDDNN/'
+XVECTOR_TDDNN_MODEL_UBM_DIR = '../BaseModels/XVECTOR_UBM/TDDNN/'
+
+XVECTOR_RESNET_MODEL_CALIBRATION_DIR = '../BaseModels/XVECTOR_CALIBRATION/RESNET/'
+XVECTOR_RESNET_MODEL_VALIDATION_DIR = '../BaseModels/XVECTOR_VALIDATION/RESNET/'
+XVECTOR_RESNET_MODEL_LDA_DIR = '../BaseModels/XVECTOR_LDA/RESNET/'
+XVECTOR_RESNET_MODEL_UBM_DIR = '../BaseModels/XVECTOR_UBM/RESNET/'
+# ==============================================================================
+T_MATRIX_MAX_ITER = 200
+T_MATRIX_DIM = 600
+T_MATRIX_STATS_TRAIN_FILE = '../BaseDadosNormalizada/statsTrainFormTmatrixIvector.p'
+T_MATRIX_FILE = '../BaseDadosNormalizada/TmatrixFromIvector.p'
 # ==============================================================================
 # Dados para calculo das características
 # --- PRE-ENFASE
@@ -92,3 +125,4 @@ PLP_LIFTER_COEF = 0.6
 # --- PNCC
 PNCC_NUM_FILTERS = 35
 # PLP_DITHER = False
+# ==============================================================================

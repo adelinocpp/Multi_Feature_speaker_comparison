@@ -1,4 +1,6 @@
 /.spyproject
 /__pycache__
+/imports/.spyproject
 /imports/__pycache__
+/models/__pycache__
 *.txt

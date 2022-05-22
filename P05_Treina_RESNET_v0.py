@@ -5,11 +5,6 @@ Created on Mon May  9 10:52:57 2022
 
 @author: adelino
 """
-
-DEPURACAO = False
-if (DEPURACAO):
-    import sys
-
 import sys
 import config as c
 import torch
@@ -248,12 +243,12 @@ def read_feats_structure(directory):
     return DB, num_speakers
 # ----------------------------------------------------------------------------            
 def get_min_loss_model(log_dir):
-    start = 1 # Start epoch
+    start = 0 # Start epoch
     save_model_file_list = list_contend(log_dir,('.pth',))
     save_model_file_list.sort()
     maxLoss = sys.float_info.max
     if (len(save_model_file_list) > 0):
-        start = 1
+        start = 0
         for file in save_model_file_list:
             values = re.split('_|/|.pth',file)
             idx = int(values[-3])
@@ -456,6 +451,7 @@ def create_optimizer(optimizer, model, new_lr, wd):
 def visualize_the_losses(train_loss, valid_loss):
     # https://github.com/Bjarten/early-stopping-pytorch/blob/master/MNIST_Early_Stopping_example.ipynb
     # visualize the loss as the network trained
+    
     fig = plt.figure(figsize=(10,8))
     plt.plot(range(1,len(train_loss)+1),train_loss, label='Training Loss')
     plt.plot(range(1,len(valid_loss)+1),valid_loss, label='Validation Loss')
@@ -482,11 +478,12 @@ with warnings.catch_warnings():
     use_cuda = False # use gpu or cpu
     embedding_size = 512
     
-    
+    # if not os.path.exists(log_dir):
+    #     os.makedirs(log_dir)
+        
     startEP, maxLoss = get_min_loss_model(log_dir)
     # Set hyperparameters
     # use_cuda = True # use gpu or cpu
-    
     endEP = c.RESNET_N_EPOCHS - startEP # Last epoch
    
     # Load dataset
@@ -494,13 +491,10 @@ with warnings.catch_warnings():
     # print the experiment configuration
     print('\nNumber of classes (speakers):\n{}\n'.format(n_classes))
     
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    
     criterion = nn.CrossEntropyLoss()
     
     # instantiate model and initialize weights
-    if (startEP == 1):
+    if (startEP == 0):
         model = background_resnet(embedding_size=embedding_size, \
                               num_classes=n_classes, backbone=c.RESNET_BACKBONETYPE)
         optimizer = create_optimizer(c.RESNET_OPT_TYPE, model, c.RESNET_LR, c.RESNET_WD)
@@ -529,9 +523,17 @@ with warnings.catch_warnings():
     avg_train_losses = []
     # to track the average validation loss per epoch as the model trains
     avg_valid_losses = []
-    
-    for epoch in range(startEP, endEP):
-    
+    # load file with data training (if exists)
+    training_File_Data = '{:}{:}'.format(c.RESNET_SAVE_MODELS_DIR,c.RESNET_TRAIN_DATA_FILE)
+    if (os.path.exists(training_File_Data)):
+        ofile = open(training_File_Data, "wb")
+        allLoss = dill.open(ofile)
+        ofile.close()  
+        if (startEP > 0):
+            avg_train_losses = allLoss['train'][:startEP]
+            avg_valid_losses = allLoss['valid'][:startEP)]
+        
+    for epoch in range(startEP, c.RESNET_N_EPOCHS):
         train_loss = train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
         
         # evaluate on validation set
@@ -550,6 +552,12 @@ with warnings.catch_warnings():
             torch.save({'epoch': epoch + 1, 'state_dict': model.state_dict(),
                         'optimizer': optimizer.state_dict()},
                        '{}/checkpoint_{:06}_{:08.5f}.pth'.format(log_dir, epoch, valid_loss))
+        
+        # Save file with data training
+        allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
+        ofile = open(training_File_Data, "rb")
+        dill.dump(allLoss, ofile)
+        ofile.close()    
                    
     # find position of lowest validation loss
     minposs = avg_valid_losses.index(min(avg_valid_losses))+1 
@@ -558,7 +566,7 @@ with warnings.catch_warnings():
     # visualize the loss and learning rate as the network trained
     visualize_the_losses(avg_train_losses, avg_valid_losses)
     allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
-    ofile = open('{:}loss_resnet.txt'.format(c.RESNET_SAVE_MODELS_DIR), "wb")
-    dill.dump(ubm_data, ofile)
+    ofile = open(training_File_Data, "wb")
+    dill.dump(allLoss, ofile)
     ofile.close()    
 

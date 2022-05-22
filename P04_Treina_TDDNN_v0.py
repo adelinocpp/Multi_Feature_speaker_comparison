@@ -25,17 +25,12 @@ import os
 import time
 import dill
 import random
-import re
 from glob import glob
-# from DB_wav_reader import read_feats_structure, find_save_models
-# from SR_Dataset import read_MFB, TruncatedInputfromMFB, ToTensorInput, \
-#     ToTensorDevInput, DvectorDataset, collate_fn_feat_padded, \
-#     load_training_model, get_min_loss_model
-# # from model.model import background_resnet
-# import matplotlib.pyplot as plt
 import warnings
 from models.x_vector import X_vector
-
+from models.tddnn_utilities import read_feats_structure, get_min_loss_model, read_MFB
+# os.environ["OMP_NUM_THREADS"] = "1" 
+# os.environ["MKL_NUM_THREADS"] = "1" 
 # ----------------------------------------------------------------------------
 def load_training_model(use_cuda, log_dir, cp_num, embedding_size, n_classes):
     # model = background_resnet(embedding_size=embedding_size, \
@@ -167,36 +162,6 @@ class TruncatedInputfromMFB(object):
             network_inputs.append(frames_slice)
         return np.array(network_inputs)
 # ----------------------------------------------------------------------------            
-def read_MFB(filename):
-    # with open(filename, 'rb') as f:
-    #     feat_and_label = pickle.load(f)
-    # print(filename)
-    # print(filename.split('/')[-2])
-    ofile = open(filename, "rb")
-    featureObj = dill.load(ofile)
-    ofile.close()
-    feature = featureObj.features["mfcc"].data.T.astype(np.float32)
-    # feature = feat_and_label['feat'] # size : (n_frames, dim=40)
-    # label = feat_and_label['label']
-    label = filename.split('/')[-2]
-    # print(feature.shape)
-    # sys.exit("Depura")
-    if (feature.shape[0] <  c.TDDNN_NUM_WIN_SIZE):
-        print("read_MFB error: num_frames < win_size")
-        print("filename: {}".format(filename))
-        print("feature shape: {}, {}".format(feature.shape[0],feature.shape[1]))
-    """
-    VAD
-    """
-    # start_sec, end_sec = 0.5, 0.5
-    # start_frame = int(start_sec / 0.01)
-    # end_frame = len(feature) - int(end_sec / 0.01)
-    # ori_feat = feature
-    # feature = feature[start_frame:end_frame,:]
-    #assert len(feature) > 40, (
-    #            'length is too short. len:%s, ori_len:%s, file:%s' % (len(feature), len(ori_feat), filename))
-    return feature, label
-# ----------------------------------------------------------------------------            
 class DvectorDataset(data.Dataset):
     def __init__(self, DB, loader, spk_to_idx, transform=None, *arg, **kw):
         self.DB = DB
@@ -219,47 +184,6 @@ class DvectorDataset(data.Dataset):
     
     def __len__(self):
         return self.len
-# ----------------------------------------------------------------------------            
-def read_feats_structure(directory):
-    DB = pd.DataFrame()
-    DB['filename'] = list_contend(directory,('.p',)) #find_feats(directory) # filename
-    DB['filename'] = DB['filename'].apply(lambda x: x.replace('\\', '/')) # normalize windows paths
-    DB['speaker_id'] = DB['filename'].apply(lambda x: x.split('/')[-2]) # speaker folder name
-    DB['dataset_id'] = DB['filename'].apply(lambda x: x.split('/')[-2][4:]) # dataset folder name
-    DB['speaker_count'] = DB['speaker_id']  
-    # DB['speaker_id'] = DB['filename'].apply(lambda x: x.split('/')[-2]) # speaker folder name
-    # DB['dataset_id'] = DB['filename'].apply(lambda x: x.split('/')[-3]) # dataset folder name
-    # DB['speaker_count'] = DB['speaker_id']
-    numEmbeddings = {}
-    for idx, element in enumerate(DB['speaker_id']):
-        if element in numEmbeddings:
-            numEmbeddings[element] += 1
-            DB['speaker_count'][idx] = numEmbeddings[element]
-        else:
-            numEmbeddings[element] = 1
-            DB['speaker_count'][idx] = numEmbeddings[element]
-
-    # DB['dataset_id'] = DB['filename'].apply(lambda x: x.split('/')[-3]) # dataset folder name
-    num_speakers = len(DB['speaker_id'].unique())
-    # logging.info('Found {} files with {} different speakers.'.format(str(len(DB)).zfill(7), str(num_speakers).zfill(5)))
-    # logging.info(DB.head(10))
-    return DB, num_speakers
-# ----------------------------------------------------------------------------            
-def get_min_loss_model(log_dir):
-    start = 1 # Start epoch
-    save_model_file_list = list_contend(log_dir,('.pth',))
-    save_model_file_list.sort()
-    maxLoss = sys.float_info.max
-    if (len(save_model_file_list) > 0):
-        start = 1
-        for file in save_model_file_list:
-            values = re.split('_|/|.pth',file)
-            idx = int(values[-3])
-            loss = float(values[-2])
-            if (loss < maxLoss):
-                maxLoss = loss
-                start = idx
-    return start, maxLoss
 # ----------------------------------------------------------------------------            
 def load_dataset(dbFolder, val_ratio):
     # Load training set and validation set
@@ -498,7 +422,7 @@ with warnings.catch_warnings():
     
     device = torch.device("cuda" if use_cuda else "cpu")
     # instantiate model and initialize weights
-    if (startEP == 1):
+    if (startEP == 0):
         # model = background_resnet(embedding_size=embedding_size, \
         #                       num_classes=n_classes, backbone=c.BACKBONETYPE)
         model = X_vector(featureDim, n_classes)
@@ -516,7 +440,7 @@ with warnings.catch_warnings():
                                                        batch_size=c.TDDNN_BATCH_SIZE,
                                                        shuffle=c.TDDNN_USE_SHUFFLE,
                                                        pin_memory=True,
-                                                       num_workers = 1)
+                                                       num_workers = 1) # timeout=240
     valid_loader = torch.utils.data.DataLoader(dataset=valid_dataset,
                                                        batch_size=c.TDDNN_VALID_BATCH,
                                                        shuffle=False,
@@ -528,8 +452,17 @@ with warnings.catch_warnings():
     avg_train_losses = []
     # to track the average validation loss per epoch as the model trains
     avg_valid_losses = []
+    # load file with data training (if exists)
+    training_File_Data = '{:}{:}'.format(c.TDDNN_SAVE_MODELS_DIR,c.TDDNN_TRAIN_DATA_FILE)
+    if (os.path.exists(training_File_Data)):
+        ofile = open(training_File_Data, "wb")
+        allLoss = dill.open(ofile)
+        ofile.close()  
+        if (startEP > 0):
+            avg_train_losses = allLoss['train'][:startEP]
+            avg_valid_losses = allLoss['valid'][:startEP)]
     
-    for epoch in range(startEP, endEP):
+    for epoch in range(startEP, c.TDDNN_N_EPOCHS):
     
         # train for one epoch
         train_loss = train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
@@ -550,6 +483,12 @@ with warnings.catch_warnings():
                         'optimizer': optimizer.state_dict()},
                        '{}/checkpoint_{:06}_{:08.5f}.pth'.format(log_dir, epoch, valid_loss))
             
+        # Save file with data training
+        allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
+        ofile = open(training_File_Data, "rb")
+        dill.dump(allLoss, ofile)
+        ofile.close()      
+        
     # find position of lowest validation loss
     minposs = avg_valid_losses.index(min(avg_valid_losses))+1 
     print('Lowest validation loss at epoch %d' %minposs)
@@ -557,6 +496,6 @@ with warnings.catch_warnings():
     # visualize the loss and learning rate as the network trained
     visualize_the_losses(avg_train_losses, avg_valid_losses)
     allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
-    ofile = open('{:}loss_tddnn.txt'.format(c.TDDNN_SAVE_MODELS_DIR), "wb")
-    dill.dump(ubm_data, ofile)
-    ofile.close()
+    ofile = open(training_File_Data, "rb")
+    dill.dump(allLoss, ofile)
+    ofile.close()  
