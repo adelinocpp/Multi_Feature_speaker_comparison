@@ -363,7 +363,7 @@ def train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
     return losses.avg
 # -----------------------------------------------------------------------------                     
 def validate(val_loader, model, criterion, use_cuda, epoch):
-    batch_time = AverageMeter()
+    # batch_time = AverageMeter()
     losses = AverageMeter()
     val_acc = AverageMeter()
     
@@ -397,9 +397,7 @@ def validate(val_loader, model, criterion, use_cuda, epoch):
             # batch_time.update(time.time() - end)
             # end = time.time()
             if i % log_interval == 0:
-                print(
-                        'Valid run: {:3d}/{:3d}\t'.format(
-                         i, len(val_loader)))
+                print('Valid run: {:3d}/{:3d}\t'.format(i, len(val_loader)))
         print('  * Validation: '
                   'Loss {loss.avg:.4f}\t'
                   'Acc {val_acc.avg:.4f}'.format(
@@ -476,8 +474,18 @@ with warnings.catch_warnings():
     # Verifica a etapa de treinamento
     log_dir = c.RESNET_SAVE_MODELS_DIR # where to save checkpoints
     use_cuda = False # use gpu or cpu
-    embedding_size = 512
-    
+    if (c.RESNET_BACKBONETYPE == 'resnet18'):
+        embedding_size = 32
+    elif(c.RESNET_BACKBONETYPE == 'resnet34'):
+        embedding_size = 64
+    elif(c.RESNET_BACKBONETYPE == 'resnet50'):
+        embedding_size = 128
+    elif(c.RESNET_BACKBONETYPE == 'resnet101'):
+        embedding_size = 256
+    elif(c.RESNET_BACKBONETYPE == 'resnet152'):
+        embedding_size = 512
+    # embedding_size = 512
+     
     # if not os.path.exists(log_dir):
     #     os.makedirs(log_dir)
         
@@ -503,6 +511,7 @@ with warnings.catch_warnings():
                                     n_classes,TypeBackBone=c.RESNET_BACKBONETYPE)
     if use_cuda:
         model.cuda()    
+        
     # define loss function (criterion), optimizer and scheduler
     # scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=2, min_lr=1e-4, verbose=1)
     # scheduler = optim.lr_scheduler.CyclicLR(optimizer, max_lr=1, base_lr=1e-4, verbose=1)        
@@ -526,12 +535,12 @@ with warnings.catch_warnings():
     # load file with data training (if exists)
     training_File_Data = '{:}{:}'.format(c.RESNET_SAVE_MODELS_DIR,c.RESNET_TRAIN_DATA_FILE)
     if (os.path.exists(training_File_Data)):
-        ofile = open(training_File_Data, "wb")
+        ofile = open(training_File_Data, "rb")
         allLoss = dill.open(ofile)
         ofile.close()  
         if (startEP > 0):
             avg_train_losses = allLoss['train'][:startEP]
-            avg_valid_losses = allLoss['valid'][:startEP)]
+            avg_valid_losses = allLoss['valid'][:startEP]
         
     for epoch in range(startEP, c.RESNET_N_EPOCHS):
         train_loss = train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
@@ -555,7 +564,7 @@ with warnings.catch_warnings():
         
         # Save file with data training
         allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
-        ofile = open(training_File_Data, "rb")
+        ofile = open(training_File_Data, "wb")
         dill.dump(allLoss, ofile)
         ofile.close()    
                    
@@ -566,7 +575,7 @@ with warnings.catch_warnings():
     # visualize the loss and learning rate as the network trained
     visualize_the_losses(avg_train_losses, avg_valid_losses)
     allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
-    ofile = open(training_File_Data, "wb")
+    ofile = open(training_File_Data, "rb")
     dill.dump(allLoss, ofile)
     ofile.close()    
 

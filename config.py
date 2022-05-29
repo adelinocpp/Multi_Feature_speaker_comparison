@@ -74,11 +74,11 @@ RESNET_TRAIN_TEST_RATIO = 15
 RESNET_N_EPOCHS = 750
 RESNET_LR = 1e-1 # Initial learning rate
 RESNET_WD = 1e-4 # Weight decay (L2 penalty)
-RESNET_OPT_TYPE = 'adam' # ex) sgd, adam, adagrad
+RESNET_OPT_TYPE = 'sgd' # ex) sgd, adam, adagrad
 RESNET_BATCH_SIZE = 64 # Batch size for training # original 64
 RESNET_VALID_BATCH = 8 # Batch size for validation
 RESNET_USE_SHUFFLE = True
-RESNET_BACKBONETYPE = 'resnet152'
+RESNET_BACKBONETYPE = 'resnet18'
 RESNET_TRAIN_DATA_FILE = 'resnet_train_data.txt'
 # ==============================================================================
 CALIBRATION_DIR = '../BaseDadosNormalizada/CALIBRATION/'
@@ -104,12 +104,17 @@ XVECTOR_RESNET_MODEL_CALIBRATION_DIR = '../BaseModels/XVECTOR_CALIBRATION/RESNET
 XVECTOR_RESNET_MODEL_VALIDATION_DIR = '../BaseModels/XVECTOR_VALIDATION/RESNET/'
 XVECTOR_RESNET_MODEL_LDA_DIR = '../BaseModels/XVECTOR_LDA/RESNET/'
 XVECTOR_RESNET_MODEL_UBM_DIR = '../BaseModels/XVECTOR_UBM/RESNET/'
-# ==============================================================================
+# =============================================================================
 T_MATRIX_MAX_ITER = 200
 T_MATRIX_DIM = 600
 T_MATRIX_STATS_TRAIN_FILE = '../BaseDadosNormalizada/statsTrainFormTmatrixIvector.p'
 T_MATRIX_FILE = '../BaseDadosNormalizada/TmatrixFromIvector.p'
-# ==============================================================================
+# =============================================================================
+GMM_CALIBRATE_RESULTS = "../Resultados/UBM_GMM/"
+GMM_CALIBRATE_FILEDATA = "../Resultados/UBM_GMM/gmm_calibrate_file_data.pth"
+GMM_VALIDATE_FILEDATA = "../Resultados/UBM_GMM/gmm_validate_file_data.pth"
+# =============================================================================
+
 # Dados para calculo das características
 # --- PRE-ENFASE
 PRE_ENPHASIS_COEF = 0.975

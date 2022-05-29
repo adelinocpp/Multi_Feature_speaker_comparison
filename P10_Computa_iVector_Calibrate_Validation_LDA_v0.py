@@ -49,6 +49,7 @@ if (Compute_i_vectors):
     # -------------------------------------------------------------------------
     file_list = list_contend(c.CALIBRATION_DIR, pattern = ('.p',))
     file_list.sort()
+    print("Iniciado i-vector calibracao...")
     for idx, filename in enumerate(file_list):
         ofile = open(filename, "rb")
         featureObj = dill.load(ofile)
@@ -75,6 +76,7 @@ if (Compute_i_vectors):
     # -------------------------------------------------------------------------
     file_list = list_contend(c.VALIDATION_DIR, pattern = ('.p',))
     file_list.sort()
+    print("Iniciado i-vector validacao...")
     for idx, filename in enumerate(file_list):
         ofile = open(filename, "rb")
         featureObj = dill.load(ofile)
@@ -101,6 +103,7 @@ if (Compute_i_vectors):
     # -------------------------------------------------------------------------
     file_list = list_contend(c.UBM_DIR, pattern = ('.p',))
     file_list.sort()
+    print("Iniciado i-vector ubm...")
     for idx, filename in enumerate(file_list):
         ofile = open(filename, "rb")
         featureObj = dill.load(ofile)
@@ -127,6 +130,7 @@ if (Compute_i_vectors):
     # -------------------------------------------------------------------------
     file_list = list_contend(c.LDA_DIR, pattern = ('.p',))
     file_list.sort()
+    print("Iniciado i-vector lda...")
     for idx, filename in enumerate(file_list):
         ofile = open(filename, "rb")
         featureObj = dill.load(ofile)

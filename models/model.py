@@ -13,8 +13,10 @@ class background_resnet(nn.Module):
         # copying modules from pretrained models
         if backbone == 'resnet50':
             self.pretrained = resnet.resnet50(pretrained=False)
+            numInputsTemp = 512
         elif backbone == 'resnet101':
             self.pretrained = resnet.resnet101(pretrained=False)
+            numInputsTemp = 512
         elif backbone == 'resnet152':
             self.pretrained = resnet.resnet152(pretrained=False)
             numInputsTemp = 512

@@ -286,7 +286,7 @@ def train(train_loader, model, criterion, optimizer, use_cuda, epoch, n_classes)
     return losses.avg
 # ----------------------------------------------------------------------------                     
 def validate(val_loader, model, criterion, use_cuda, epoch):
-    batch_time = AverageMeter()
+    # batch_time = AverageMeter()
     losses = AverageMeter()
     val_acc = AverageMeter()
     
@@ -321,9 +321,7 @@ def validate(val_loader, model, criterion, use_cuda, epoch):
             # batch_time.update(time.time() - end)
             # end = time.time()
             if i % log_interval == 0:
-                print(
-                        'Valid run: {:3d}/{:3d}\t'.format(
-                         i, len(val_loader)))
+                print('Valid run: {:3d}/{:3d}\t'.format(i, len(val_loader)))
         print('  * Validation: '
                   'Loss {loss.avg:.4f}\t'
                   'Acc {val_acc.avg:.4f}'.format(
@@ -455,7 +453,7 @@ with warnings.catch_warnings():
     # load file with data training (if exists)
     training_File_Data = '{:}{:}'.format(c.TDDNN_SAVE_MODELS_DIR,c.TDDNN_TRAIN_DATA_FILE)
     if (os.path.exists(training_File_Data)):
-        ofile = open(training_File_Data, "wb")
+        ofile = open(training_File_Data, "rb")
         allLoss = dill.open(ofile)
         ofile.close()  
         if (startEP > 0):
@@ -485,7 +483,7 @@ with warnings.catch_warnings():
             
         # Save file with data training
         allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
-        ofile = open(training_File_Data, "rb")
+        ofile = open(training_File_Data, "wb")
         dill.dump(allLoss, ofile)
         ofile.close()      
         
@@ -496,6 +494,6 @@ with warnings.catch_warnings():
     # visualize the loss and learning rate as the network trained
     visualize_the_losses(avg_train_losses, avg_valid_losses)
     allLoss = {'train':avg_train_losses, 'valid': avg_valid_losses}
-    ofile = open(training_File_Data, "rb")
+    ofile = open(training_File_Data, "wb")
     dill.dump(allLoss, ofile)
     ofile.close()  
