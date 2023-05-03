@@ -1,4 +1,5 @@
-/.spyproject
-/__pycache__
-/imports/__pycache__
+.spyproject
+*/.spyproject
+__pycache__
+*/__pycache__
 *.txt

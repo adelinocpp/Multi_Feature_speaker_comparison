@@ -7,7 +7,7 @@ Created on Fri Feb 18 12:18:07 2022
 """
 from pathlib import Path
 import subprocess
-
+# -----------------------------------------------------------------------------
 class AudioData:
     def __init__(self, audioFullPath):
         self.audioFullPath = audioFullPath
@@ -22,10 +22,11 @@ class AudioData:
         returnStr =  subprocess.Popen(cmdString, shell=True, stdout=subprocess.PIPE).stdout
         self.sr =  returnStr.read().decode()[0:-1]
         
+    # -------------------------------------------------------------------------        
     def check(self,ext,codec,channels,sr):
         return (self.sr == str(sr)) and (self.codec == codec) and \
             (self.channels == str(channels)) and (self.suffix == ext.upper())
-
+    # -------------------------------------------------------------------------
     def suit(self,new_ext,channels,sr):
         dir_path = Path(self.audioFullPath).parent
         basename = Path(self.audioFullPath).stem
@@ -42,3 +43,4 @@ class AudioData:
         cmdString = 'rm {:}'.format(temp_file_name)
         subprocess.Popen(cmdString, shell=True, stdout=subprocess.PIPE).stdout
         return new_file_name
+# =============================================================================
